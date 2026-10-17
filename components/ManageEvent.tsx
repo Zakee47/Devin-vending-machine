@@ -854,7 +854,7 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                 ? `This event is dynamic: anyone who signs in${byHandle ? " with X" : ""} can claim, so there's no participant list. These ${labels.addressPlural} have claimed a code.`
                 : `Only these ${labels.addressPlural} can claim a code.${byHandle ? " Attendees sign in with X." : ""}${emails && codes ? ` ${unclaimedEmailCount} yet to claim.` : ""}`}
             </CardDescription>
-            <CardAction className="col-span-full col-start-1 row-span-1 row-start-3 mt-2 flex w-full flex-wrap items-center gap-2 justify-self-start sm:col-span-1 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:mt-0 sm:w-auto sm:flex-nowrap sm:justify-self-end">
+            <CardAction className="col-span-full col-start-1 row-span-1 row-start-3 mt-2 flex w-full flex-wrap items-center gap-2 justify-self-start sm:col-span-1 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:mt-0 sm:w-auto sm:max-w-sm sm:justify-end sm:justify-self-end">
               {listedEmails && listedEmails.length > 0 ? (
                 <Button variant="outline" size="sm" onClick={exportEmails}>
                   <Download data-icon="inline-start" />
