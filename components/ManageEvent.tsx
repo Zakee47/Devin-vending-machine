@@ -854,7 +854,7 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                 ? `This event is dynamic: anyone who signs in${byHandle ? " with X" : ""} can claim, so there's no participant list. These ${labels.addressPlural} have claimed a code.`
                 : `Only these ${labels.addressPlural} can claim a code.${byHandle ? " Attendees sign in with X." : ""}${emails && codes ? ` ${unclaimedEmailCount} yet to claim.` : ""}`}
             </CardDescription>
-            <CardAction className="col-span-full col-start-1 row-span-1 row-start-3 mt-2 flex w-full flex-wrap items-center gap-2 justify-self-start sm:col-span-1 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:mt-0 sm:w-auto sm:max-w-sm sm:justify-end sm:justify-self-end">
+            <CardAction className="col-span-full col-start-1 row-span-1 row-start-3 mt-2 flex w-full flex-wrap items-center gap-2 justify-self-start sm:col-span-1 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:mt-0 sm:w-auto sm:flex-nowrap sm:justify-self-end">
               {listedEmails && listedEmails.length > 0 ? (
                 <Button variant="outline" size="sm" onClick={exportEmails}>
                   <Download data-icon="inline-start" />
@@ -874,46 +874,6 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                   }
                 />
               )}
-              {!isDynamic && emails && codes && unclaimedEmailCount > 0 ? (
-                <AlertDialog>
-                  <AlertDialogTrigger
-                    render={
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0"
-                        disabled={emailBusy}
-                      />
-                    }
-                  >
-                    <UserMinus data-icon="inline-start" />
-                    Remove unclaimed
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        Remove {unclaimedEmailCount} unclaimed{" "}
-                        {unclaimedEmailCount === 1 ? labels.noun : labels.plural}?
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Only {labels.plural} that have not claimed a code are
-                        removed. Everyone who already claimed stays on the list
-                        with their code, and codes reserved for the removed{" "}
-                        {labels.plural} return to the pool.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        disabled={emailBusy}
-                        onClick={handleRemoveUnclaimedEmails}
-                      >
-                        Remove unclaimed
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              ) : null}
               {isGlobalAdmin && !isDynamic && emails && emails.length > 0 ? (
                 <AlertDialog>
                   <AlertDialogTrigger
@@ -1033,6 +993,48 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                     ))}
                   </ToggleGroup>
                 )}
+              </div>
+            ) : null}
+            {!isDynamic && emails && codes && unclaimedEmailCount > 0 ? (
+              <div className="flex justify-end">
+                <AlertDialog>
+                  <AlertDialogTrigger
+                    render={
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        disabled={emailBusy}
+                      />
+                    }
+                  >
+                    <UserMinus data-icon="inline-start" />
+                    Remove unclaimed
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Remove {unclaimedEmailCount} unclaimed{" "}
+                        {unclaimedEmailCount === 1 ? labels.noun : labels.plural}?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Only {labels.plural} that have not claimed a code are
+                        removed. Everyone who already claimed stays on the list
+                        with their code, and codes reserved for the removed{" "}
+                        {labels.plural} return to the pool.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={emailBusy}
+                        onClick={handleRemoveUnclaimedEmails}
+                      >
+                        Remove unclaimed
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             ) : null}
             <RowList
