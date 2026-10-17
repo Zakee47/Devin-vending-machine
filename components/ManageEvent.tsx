@@ -306,12 +306,13 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
     let removed = 0;
     try {
       let hasMore = true;
-      let cursor: number | undefined;
+      let cursor: string | null = null;
       while (hasMore) {
-        const res = await removeUnclaimedEmails({ eventId: id, cursor });
+        const res: { removed: number; hasMore: boolean; cursor: string } =
+          await removeUnclaimedEmails({ eventId: id, cursor });
         removed += res.removed;
         hasMore = res.hasMore;
-        cursor = res.cursor ?? undefined;
+        cursor = res.cursor;
         if (hasMore) {
           toast.loading(`Removing ${removed} / ${total}...`, { id: toastId });
         }

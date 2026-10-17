@@ -463,22 +463,18 @@ export const setBlocked = mutation({
 // per call. Claimed emails stay on the list, so callers pass back `cursor` to
 // resume after the last row examined while `hasMore` is true.
 export const removeUnclaimed = mutation({
-  args: { eventId: v.id("events"), cursor: v.optional(v.number()) },
+  args: {
+    eventId: v.id("events"),
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
   handler: async (ctx, args) => {
     const actorEmail = await requireEventAdmin(ctx, args.eventId);
-    const after = args.cursor;
     const page = await ctx.db
       .query("emails")
-      .withIndex("by_event", (q) =>
-        after === undefined
-          ? q.eq("eventId", args.eventId)
-          : q.eq("eventId", args.eventId).gt("_creationTime", after)
-      )
-      .take(UPLOAD_CHUNK_SIZE + 1);
-    const hasMore = page.length > UPLOAD_CHUNK_SIZE;
-    const emails = hasMore ? page.slice(0, UPLOAD_CHUNK_SIZE) : page;
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+      .paginate({ cursor: args.cursor ?? null, numItems: UPLOAD_CHUNK_SIZE });
     let removed = 0;
-    for (const email of emails) {
+    for (const email of page.page) {
       const claimed = await ctx.db
         .query("codes")
         .withIndex("by_event_claimedBy", (q) =>
@@ -489,6 +485,7 @@ export const removeUnclaimed = mutation({
       await deleteEmail(ctx, email);
       removed++;
     }
+    const hasMore = !page.isDone;
     if (removed > 0) {
       await logAudit(ctx, {
         eventId: args.eventId,
@@ -497,11 +494,7 @@ export const removeUnclaimed = mutation({
         details: `Removed ${removed} unclaimed email(s)${hasMore ? " (more remaining)" : ""}`,
       });
     }
-    return {
-      removed,
-      hasMore,
-      cursor: emails.length > 0 ? emails[emails.length - 1]._creationTime : after ?? null,
-    };
+    return { removed, hasMore, cursor: page.continueCursor };
   },
 });
 

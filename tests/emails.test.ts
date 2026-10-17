@@ -310,11 +310,11 @@ test("removeUnclaimed walks large lists with a cursor and skips claimed rows", a
     eventId: event.id,
   });
   expect(first).toMatchObject({ removed: UPLOAD_CHUNK_SIZE - 1, hasMore: true });
-  expect(typeof first.cursor).toBe("number");
+  expect(typeof first.cursor).toBe("string");
   expect(await admin.query(api.emails.list, { eventId: event.id })).toHaveLength(3);
   const second = await admin.mutation(api.emails.removeUnclaimed, {
     eventId: event.id,
-    cursor: first.cursor ?? undefined,
+    cursor: first.cursor,
   });
   expect(second).toMatchObject({ removed: 2, hasMore: false });
   const remaining = await admin.query(api.emails.list, { eventId: event.id });
