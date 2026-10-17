@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Ticket,
   Trash2,
+  UserMinus,
   Undo2,
   Upload,
   UserPlus,
@@ -111,6 +112,7 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
   const removeEmail = useMutation(api.emails.remove);
   const setEmailBlocked = useMutation(api.emails.setBlocked);
   const removeAllEmails = useMutation(api.emails.removeAll);
+  const removeUnclaimedEmails = useMutation(api.emails.removeUnclaimed);
   const approveFlagged = useMutation(api.emails.approveFlagged);
   const rejectFlagged = useMutation(api.emails.rejectFlagged);
   const addCodes = useMutation(api.codes.add);
@@ -284,6 +286,45 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
         err instanceof Error
           ? err.message
           : `Failed to remove ${labels.plural}`,
+        {
+          id: toastId,
+          description:
+            removed > 0 ? `${removed} removed before the error.` : undefined,
+        }
+      );
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  // Like handleRemoveAllEmails, but skips anyone who has claimed a code and
+  // resumes from the backend's cursor because those rows stay in the list.
+  async function handleRemoveUnclaimedEmails() {
+    const total = unclaimedEmailCount;
+    setEmailBusy(true);
+    const toastId = toast.loading(`Removing unclaimed ${labels.plural}...`);
+    let removed = 0;
+    try {
+      let hasMore = true;
+      let cursor: number | undefined;
+      while (hasMore) {
+        const res = await removeUnclaimedEmails({ eventId: id, cursor });
+        removed += res.removed;
+        hasMore = res.hasMore;
+        cursor = res.cursor ?? undefined;
+        if (hasMore) {
+          toast.loading(`Removing ${removed} / ${total}...`, { id: toastId });
+        }
+      }
+      toast.success(
+        `Removed ${removed} unclaimed ${removed === 1 ? labels.noun : labels.plural}`,
+        { id: toastId }
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : `Failed to remove unclaimed ${labels.plural}`,
         {
           id: toastId,
           description:
@@ -832,6 +873,46 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                   }
                 />
               )}
+              {!isDynamic && emails && codes && unclaimedEmailCount > 0 ? (
+                <AlertDialog>
+                  <AlertDialogTrigger
+                    render={
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        disabled={emailBusy}
+                      />
+                    }
+                  >
+                    <UserMinus data-icon="inline-start" />
+                    Remove unclaimed
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Remove {unclaimedEmailCount} unclaimed{" "}
+                        {unclaimedEmailCount === 1 ? labels.noun : labels.plural}?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Only {labels.plural} that have not claimed a code are
+                        removed. Everyone who already claimed stays on the list
+                        with their code, and codes reserved for the removed{" "}
+                        {labels.plural} return to the pool.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={emailBusy}
+                        onClick={handleRemoveUnclaimedEmails}
+                      >
+                        Remove unclaimed
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : null}
               {isGlobalAdmin && !isDynamic && emails && emails.length > 0 ? (
                 <AlertDialog>
                   <AlertDialogTrigger

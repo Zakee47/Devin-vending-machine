@@ -459,6 +459,52 @@ export const setBlocked = mutation({
   },
 });
 
+// Removes the event's eligible emails that have not claimed a code, one chunk
+// per call. Claimed emails stay on the list, so callers pass back `cursor` to
+// resume after the last row examined while `hasMore` is true.
+export const removeUnclaimed = mutation({
+  args: { eventId: v.id("events"), cursor: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const actorEmail = await requireEventAdmin(ctx, args.eventId);
+    const after = args.cursor;
+    const page = await ctx.db
+      .query("emails")
+      .withIndex("by_event", (q) =>
+        after === undefined
+          ? q.eq("eventId", args.eventId)
+          : q.eq("eventId", args.eventId).gt("_creationTime", after)
+      )
+      .take(UPLOAD_CHUNK_SIZE + 1);
+    const hasMore = page.length > UPLOAD_CHUNK_SIZE;
+    const emails = hasMore ? page.slice(0, UPLOAD_CHUNK_SIZE) : page;
+    let removed = 0;
+    for (const email of emails) {
+      const claimed = await ctx.db
+        .query("codes")
+        .withIndex("by_event_claimedBy", (q) =>
+          q.eq("eventId", args.eventId).eq("claimedBy", email.email)
+        )
+        .first();
+      if (claimed) continue;
+      await deleteEmail(ctx, email);
+      removed++;
+    }
+    if (removed > 0) {
+      await logAudit(ctx, {
+        eventId: args.eventId,
+        action: "emails_removed_unclaimed",
+        actorEmail: actorEmail ?? undefined,
+        details: `Removed ${removed} unclaimed email(s)${hasMore ? " (more remaining)" : ""}`,
+      });
+    }
+    return {
+      removed,
+      hasMore,
+      cursor: emails.length > 0 ? emails[emails.length - 1]._creationTime : after ?? null,
+    };
+  },
+});
+
 // Removes up to one chunk of the event's eligible emails per call so a large
 // list stays within a single transaction's limits. Callers repeat while
 // `hasMore` is true.
