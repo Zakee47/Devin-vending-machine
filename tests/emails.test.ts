@@ -235,3 +235,118 @@ test("a blocked attendee can't re-enroll on a dynamic event", async () => {
     ok: false,
   });
 });
+
+test("removeUnclaimed deletes only emails without a claimed code and releases their reservations", async () => {
+  const { t, admin, event } = await setup();
+  await admin.mutation(api.emails.add, {
+    eventId: event.id,
+    emails: ["one@example.com", "two@example.com", "three@example.com"],
+  });
+  await admin.mutation(api.codes.add, {
+    eventId: event.id,
+    codes: ["A", "B", "C"],
+  });
+  await t.run(async (ctx) => {
+    const [a, b] = await ctx.db
+      .query("codes")
+      .withIndex("by_event", (q) => q.eq("eventId", event.id))
+      .collect();
+    await ctx.db.patch(a._id, { claimedBy: "one@example.com" });
+    await ctx.db.patch(b._id, { reservedFor: "two@example.com" });
+    await ctx.db.insert("accessRequests", {
+      eventId: event.id,
+      email: "two@example.com",
+      status: "approved",
+    });
+  });
+
+  expect(
+    await admin.mutation(api.emails.removeUnclaimed, { eventId: event.id }),
+  ).toMatchObject({ removed: 2, hasMore: false });
+
+  const remaining = await admin.query(api.emails.list, { eventId: event.id });
+  expect(remaining.map((e) => e.email)).toEqual(["one@example.com"]);
+  const codes = await admin.query(api.codes.list, { eventId: event.id });
+  expect(codes).toHaveLength(3);
+  expect(codes.find((c) => c.code === "A")?.claimedBy).toBe("one@example.com");
+  expect(codes.find((c) => c.code === "B")?.reservedFor).toBeUndefined();
+  const requests = await t.run((ctx) =>
+    ctx.db
+      .query("accessRequests")
+      .withIndex("by_event", (q) => q.eq("eventId", event.id))
+      .collect(),
+  );
+  expect(requests).toEqual([]);
+  const audit = await admin.query(api.auditLog.list, { eventId: event.id });
+  expect(audit[0]).toMatchObject({
+    action: "emails_removed_unclaimed",
+    actorEmail: identity.email,
+    details: "Removed 2 unclaimed email(s)",
+  });
+
+  expect(
+    await admin.mutation(api.emails.removeUnclaimed, { eventId: event.id }),
+  ).toMatchObject({ removed: 0, hasMore: false });
+  expect(await admin.query(api.emails.list, { eventId: event.id })).toHaveLength(1);
+});
+
+test("removeUnclaimed walks large lists with a cursor and skips claimed rows", async () => {
+  const { t, admin, event } = await setup();
+  const total = UPLOAD_CHUNK_SIZE + 2;
+  await t.run(async (ctx) => {
+    for (let i = 0; i < total; i++) {
+      await ctx.db.insert("emails", {
+        eventId: event.id,
+        email: `user${i}@example.com`,
+      });
+    }
+    await ctx.db.insert("codes", {
+      eventId: event.id,
+      code: "A",
+      claimedBy: "user0@example.com",
+    });
+  });
+  const first = await admin.mutation(api.emails.removeUnclaimed, {
+    eventId: event.id,
+  });
+  expect(first).toMatchObject({ removed: UPLOAD_CHUNK_SIZE - 1, hasMore: true });
+  expect(typeof first.cursor).toBe("string");
+  expect(await admin.query(api.emails.list, { eventId: event.id })).toHaveLength(3);
+  const second = await admin.mutation(api.emails.removeUnclaimed, {
+    eventId: event.id,
+    cursor: first.cursor,
+  });
+  expect(second).toMatchObject({ removed: 2, hasMore: false });
+  const remaining = await admin.query(api.emails.list, { eventId: event.id });
+  expect(remaining.map((e) => e.email)).toEqual(["user0@example.com"]);
+});
+
+test("removeUnclaimed is scoped to the event and open to event admins of that event", async () => {
+  const { t, admin, event } = await setup();
+  const other = await admin.mutation(api.events.create, { name: "Other" });
+  await admin.mutation(api.emails.add, {
+    eventId: event.id,
+    emails: ["one@example.com"],
+  });
+  await admin.mutation(api.emails.add, {
+    eventId: other.id,
+    emails: ["two@example.com"],
+  });
+  const organizer = await withOrganizer(t, event.id);
+  await expect(
+    organizer.mutation(api.emails.removeUnclaimed, { eventId: other.id }),
+  ).rejects.toThrow("Not an admin");
+  await expect(
+    t.mutation(api.emails.removeUnclaimed, { eventId: event.id }),
+  ).rejects.toThrow();
+  expect(
+    await organizer.mutation(api.emails.removeUnclaimed, { eventId: event.id }),
+  ).toMatchObject({ removed: 1, hasMore: false });
+  expect(await admin.query(api.emails.list, { eventId: event.id })).toEqual([]);
+  expect(await admin.query(api.emails.list, { eventId: other.id })).toHaveLength(1);
+  const audit = await admin.query(api.auditLog.list, { eventId: event.id });
+  expect(audit[0]).toMatchObject({
+    action: "emails_removed_unclaimed",
+    actorEmail: "organizer@example.com",
+  });
+});
