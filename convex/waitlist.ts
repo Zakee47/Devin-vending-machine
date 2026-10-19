@@ -6,6 +6,7 @@ import { requireEventAdmin } from "./admins";
 import { isBlacklisted } from "./blacklist";
 import { logAudit } from "./auditLog";
 import { eventIdentity, resolveViewer } from "./identity";
+import { nextAvailable } from "./claims";
 import { isXHandleKey } from "../lib/attendee-identity";
 
 // Attendees not on an event's whitelist can request access. Requests are
@@ -237,14 +238,9 @@ export const approve = mutation({
     // held per email.
     let reservedCode = priorReservation?.code;
     if (!priorClaim && !priorReservation) {
-      const available = await ctx.db
-        .query("codes")
-        .withIndex("by_event_claimedBy", (q) =>
-          q.eq("eventId", request.eventId).eq("claimedBy", undefined)
-        )
-        .filter(notExpired)
-        .filter((q) => q.eq(q.field("reservedFor"), undefined))
-        .first();
+      const available = event
+        ? await nextAvailable(ctx, event, undefined)
+        : null;
       if (available) {
         await ctx.db.patch(available._id, { reservedFor: request.email });
         reservedCode = available.code;

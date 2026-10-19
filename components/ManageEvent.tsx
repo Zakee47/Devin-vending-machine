@@ -179,6 +179,7 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
     ? null
     : effectiveTarget.slice("existing:".length);
   const hasBlocks = blockTypes.length > 0;
+  const allBlocksArchived = hasBlocks && openBlockTypes.length === 0;
   // A second block requires both blocks to be named, so creating one next to
   // an unnamed block also asks for the existing block's name.
   const needsFirstBlockName =
@@ -1209,6 +1210,12 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                 return res;
               }}
             />
+            {allBlocksArchived ? (
+              <p className="text-sm text-muted-foreground">
+                Every block on this event is archived. Unarchive one to add
+                codes to it.
+              </p>
+            ) : (
             <form onSubmit={handleAddCodes} className="flex flex-col gap-3">
               {hasBlocks ? (
                 <Field>
@@ -1247,12 +1254,6 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                       : "This event has both code blocks. Pasted and uploaded codes go into the selected one."}
                   </FieldDescription>
                 </Field>
-              ) : null}
-              {hasBlocks && openBlockTypes.length === 0 && !isNewBlock ? (
-                <FieldDescription>
-                  Every block on this event is archived. Unarchive one to add
-                  codes to it.
-                </FieldDescription>
               ) : null}
               {!hasBlocks || isNewBlock ? (
                 <Field>
@@ -1338,6 +1339,7 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                 ) : null}
               </div>
             </form>
+            )}
             {blockTypes.length > 1 ? (
               // The "Add codes to" selection doubles as the list filter, so
               // one toggle controls both where codes go and which are shown.

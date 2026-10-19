@@ -301,3 +301,55 @@ test("only system admins can archive a block", async () => {
     })
   ).rejects.toThrow(/admin/i);
 });
+
+test("archiving a legacy block without a stored type list still lets other codes dispense", async () => {
+  const { t, admin, event } = await setup();
+  await t.run(async (ctx) => {
+    await ctx.db.insert("codes", {
+      eventId: event.id,
+      code: "LEGACY",
+      codeType: "Credits",
+    });
+    await ctx.db.insert("codes", { eventId: event.id, code: "PLAIN" });
+    await ctx.db.patch(event.id, { dynamic: true });
+  });
+  await admin.mutation(api.codes.setTypeArchived, {
+    eventId: event.id,
+    codeType: "Credits",
+    archived: true,
+  });
+  const attendee = t.withIdentity({
+    subject: "a1",
+    email: "a1@example.com",
+    emailVerified: true,
+  });
+  expect(
+    await attendee.mutation(api.claims.claim, { slug: event.slug })
+  ).toMatchObject({ code: "PLAIN" });
+});
+
+test("approving an access request never reserves a code from an archived block", async () => {
+  const { t, admin, event } = await setup();
+  await admin.mutation(api.codes.add, {
+    eventId: event.id,
+    codes: ["A"],
+    codeType: "Credits",
+  });
+  await admin.mutation(api.codes.setTypeArchived, {
+    eventId: event.id,
+    codeType: "Credits",
+    archived: true,
+  });
+  const requestId = await t.run((ctx) =>
+    ctx.db.insert("accessRequests", {
+      eventId: event.id,
+      email: "a1@example.com",
+      status: "pending",
+    })
+  );
+  await admin.mutation(api.waitlist.approve, { requestId });
+  const reserved = await t.run(async (ctx) =>
+    (await ctx.db.query("codes").collect()).filter((c) => c.reservedFor)
+  );
+  expect(reserved).toEqual([]);
+});
