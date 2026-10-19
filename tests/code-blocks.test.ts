@@ -174,7 +174,7 @@ test("archiving a block stops dispensing and keeps every code; unarchiving resto
       codeType: "Credits",
       archived: true,
     })
-  ).toEqual({ unclaimed: 1, claimed: 1 });
+  ).toEqual({ unclaimed: 1, claimed: 1, stripeCodes: 0 });
   const archived = (await admin.query(api.events.get, { id: event.id }))!;
   expect(archived.archivedCodeTypes).toEqual(["Credits"]);
   expect(archived.codeTypes).toEqual(["Credits"]);

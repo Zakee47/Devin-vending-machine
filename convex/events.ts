@@ -223,6 +223,7 @@ export const get = query({
       codeTypes: event.codeTypes,
       codeTypeValues: event.codeTypeValues,
       archivedCodeTypes: event.archivedCodeTypes,
+      stripeArchiveSync: event.stripeArchiveSync,
       eventDate: event.eventDate,
       eventEndDate: event.eventEndDate,
       claimInstructions: event.claimInstructions,

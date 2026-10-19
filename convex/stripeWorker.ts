@@ -7,6 +7,7 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { truncateStripeBatchName } from "../lib/stripe-name";
+import { STRIPE_SYNC_CHUNK } from "./stripeValidation";
 
 function promotionCode(
   seed: string,
@@ -128,6 +129,71 @@ export const generate = internalAction({
         ...args,
         error:
           "Generation stopped. Saved codes are safe. Check Stripe permissions and configuration, then retry this batch to resume without duplicates.",
+      });
+    }
+  },
+});
+
+// Flips `active` on one page of a block's promotion codes, then schedules the
+// next page. Stops silently once a newer archive/unarchive supersedes it.
+export const setBlockActive = internalAction({
+  args: {
+    eventId: v.id("events"),
+    codeType: v.optional(v.string()),
+    version: v.number(),
+    cursor: v.number(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const chunk = await ctx.runQuery(internal.codes.stripeSyncChunk, {
+        ...args,
+        limit: STRIPE_SYNC_CHUNK,
+      });
+      if (!chunk) return;
+      const stripe = new Stripe(process.env.STRIPE_API_KEY ?? "", {
+        apiVersion: "2025-08-27.basil",
+        maxNetworkRetries: 2,
+        timeout: 15_000,
+      });
+      let updated = 0;
+      let failed = 0;
+      let error: string | undefined;
+      for (const item of chunk.items) {
+        try {
+          if (!item.promoId)
+            throw new Error(`No Stripe promotion code recorded for ${item.code}`);
+          await stripe.promotionCodes.update(item.promoId, {
+            active: chunk.active,
+          });
+          updated++;
+        } catch (err) {
+          failed++;
+          error ??= err instanceof Error ? err.message : String(err);
+        }
+      }
+      await ctx.runMutation(internal.codes.stripeSyncProgress, {
+        eventId: args.eventId,
+        codeType: args.codeType,
+        version: args.version,
+        updated,
+        failed,
+        error,
+        done: chunk.done,
+      });
+      if (!chunk.done)
+        await ctx.scheduler.runAfter(0, internal.stripeWorker.setBlockActive, {
+          ...args,
+          cursor: args.cursor + STRIPE_SYNC_CHUNK,
+        });
+    } catch (err) {
+      await ctx.runMutation(internal.codes.stripeSyncProgress, {
+        eventId: args.eventId,
+        codeType: args.codeType,
+        version: args.version,
+        updated: 0,
+        failed: 0,
+        error: err instanceof Error ? err.message : String(err),
+        done: true,
       });
     }
   },
