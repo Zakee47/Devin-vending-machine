@@ -134,6 +134,11 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
   const [emailFilter, setEmailFilter] = useState<EmailStatusFilter>("all");
   const [codeInput, setCodeInput] = useState("");
   const [blockTarget, setBlockTarget] = useState<string | null>(null);
+  // Which archived block's codes are listed once the add form, whose block
+  // picker normally doubles as the list filter, is hidden.
+  const [archivedListType, setArchivedListType] = useState<string | null>(
+    null
+  );
   const [newBlockName, setNewBlockName] = useState("");
   const [newBlockValue, setNewBlockValue] = useState("");
   const [firstBlockName, setFirstBlockName] = useState("");
@@ -179,7 +184,15 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
     ? null
     : effectiveTarget.slice("existing:".length);
   const hasBlocks = blockTypes.length > 0;
-  const allBlocksArchived = hasBlocks && openBlockTypes.length === 0;
+  // With both blocks archived nothing can take new codes; with one archived
+  // block the add form still offers the free second slot.
+  const allBlocksArchived =
+    openBlockTypes.length === 0 && blockTypes.length >= 2;
+  const listedType = allBlocksArchived
+    ? archivedListType !== null && blockTypes.includes(archivedListType)
+      ? archivedListType
+      : blockTypes[0]
+    : (selectedType ?? blockTypes[0]);
   // A second block requires both blocks to be named, so creating one next to
   // an unnamed block also asks for the existing block's name.
   const needsFirstBlockName =
@@ -1201,6 +1214,9 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                 setBlockTarget((prev) =>
                   prev === `existing:${from ?? ""}` ? `existing:${to}` : prev
                 );
+                setArchivedListType((prev) =>
+                  prev === (from ?? "") ? to : prev
+                );
               }}
               onDelete={async (codeType) => {
                 const res = await removeCodeType({ eventId: id, codeType });
@@ -1211,10 +1227,28 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
               }}
             />
             {allBlocksArchived ? (
-              <p className="text-sm text-muted-foreground">
-                Every block on this event is archived. Unarchive one to add
-                codes to it.
-              </p>
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Every block on this event is archived. Unarchive one to add
+                  codes to it.
+                </p>
+                <Field>
+                  <FieldLabel>Show codes in</FieldLabel>
+                  <div className="flex flex-wrap gap-2">
+                    {blockTypes.map((t) => (
+                      <Button
+                        key={t || "__unnamed"}
+                        type="button"
+                        size="sm"
+                        variant={listedType === t ? "secondary" : "outline"}
+                        onClick={() => setArchivedListType(t)}
+                      >
+                        {t || "Unnamed block"}
+                      </Button>
+                    ))}
+                  </div>
+                </Field>
+              </div>
             ) : (
             <form onSubmit={handleAddCodes} className="flex flex-col gap-3">
               {hasBlocks ? (
@@ -1345,7 +1379,7 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
               // one toggle controls both where codes go and which are shown.
               <RowList
                 mono
-                items={codeRows(selectedType ?? blockTypes[0])}
+                items={codeRows(listedType)}
                 emptyText="No codes in this block yet."
               />
             ) : (

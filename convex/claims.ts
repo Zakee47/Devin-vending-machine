@@ -31,8 +31,10 @@ async function findParticipantRow(
 }
 
 // The unclaimed, unreserved, unexpired code an attendee would receive next,
-// optionally restricted to one block. Archived blocks never dispense, so an
-// unrestricted request skips their codes in the pool.
+// optionally restricted to one block. Archived blocks never dispense. An
+// unrestricted request on an event with archived blocks probes each open
+// block through its own index, so a large archived pool is never scanned.
+// Legacy events without a stored block list fall back to filtering the pool.
 export async function nextAvailable(
   ctx: QueryCtx | MutationCtx,
   event: Doc<"events">,
@@ -42,6 +44,23 @@ export async function nextAvailable(
     return null;
   }
   const archived = event.archivedCodeTypes ?? [];
+  if (requestedType === undefined && archived.length > 0 && event.codeTypes) {
+    for (const typeKey of event.codeTypes) {
+      if (archived.includes(typeKey)) continue;
+      const hit = await firstOpenCode(ctx, event, typeKey || undefined, []);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  return await firstOpenCode(ctx, event, requestedType, archived);
+}
+
+async function firstOpenCode(
+  ctx: QueryCtx | MutationCtx,
+  event: Doc<"events">,
+  requestedType: string | undefined,
+  excludedTypes: string[]
+) {
   const codes =
     requestedType !== undefined
       ? ctx.db
@@ -62,7 +81,7 @@ export async function nextAvailable(
     .filter((q) => q.eq(q.field("reservedFor"), undefined))
     .filter((q) =>
       q.and(
-        ...archived.map((t) =>
+        ...excludedTypes.map((t) =>
           q.neq(q.field("codeType"), t === "" ? undefined : t)
         )
       )
