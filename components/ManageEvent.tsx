@@ -1214,6 +1214,9 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                 setBlockTarget((prev) =>
                   prev === `existing:${from ?? ""}` ? `existing:${to}` : prev
                 );
+                setArchivedListType((prev) =>
+                  prev === (from ?? "") ? to : prev
+                );
               }}
               onDelete={async (codeType) => {
                 const res = await removeCodeType({ eventId: id, codeType });
