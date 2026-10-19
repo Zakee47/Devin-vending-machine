@@ -81,6 +81,9 @@ export default defineSchema({
     // Optional free-text value per code block, keyed by type ("" = unnamed),
     // e.g. "100" or "Team plan". Rendered with a "$" prefix only when numeric.
     codeTypeValues: v.optional(v.record(v.string(), v.string())),
+    // Code blocks (by type key, "" = unnamed) that no longer dispense codes,
+    // e.g. after the event ended. Their codes stay for records and receipts.
+    archivedCodeTypes: v.optional(v.array(v.string())),
   }).index("by_slug", ["slug"]),
 
   // The X handle Clerk reports for a user, copied server-side from Clerk's

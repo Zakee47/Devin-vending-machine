@@ -1,10 +1,15 @@
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { requireEventAdmin } from "./admins";
+import { adminEmailStatus, requireAdmin, requireEventAdmin } from "./admins";
 import { viewerIdentityKeys } from "./identity";
 import { logAudit } from "./auditLog";
-import { activeCodeTypes, blockKey, blockValue } from "./blockValues";
+import {
+  activeCodeTypes,
+  blockKey,
+  blockValue,
+  isArchivedType,
+} from "./blockValues";
 import { codeTerms as termsOf } from "./codeTerms";
 
 // Drop the type from the event's denormalized list when its last code is
@@ -29,6 +34,9 @@ export async function dropTypeIfEmpty(
       await ctx.db.patch(eventId, {
         codeTypes: event.codeTypes.filter((t) => t !== typeKey),
         codeTypeValues: values,
+        archivedCodeTypes: event.archivedCodeTypes?.filter(
+          (t) => t !== typeKey
+        ),
       });
     }
   }
@@ -99,6 +107,11 @@ export const add = mutation({
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
     const codeType = args.codeType?.trim() || undefined;
+    if (isArchivedType(event, codeType)) {
+      throw new Error(
+        "This code block is archived. Unarchive it before adding codes."
+      );
+    }
     const existing = await ctx.db
       .query("codes")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -211,7 +224,14 @@ export const renameType = mutation({
       values[toKey] = values[fromKey];
     }
     if (fromKey !== toKey) delete values[fromKey];
-    await ctx.db.patch(args.eventId, { codeTypes, codeTypeValues: values });
+    const archivedCodeTypes = event?.archivedCodeTypes?.map((t) =>
+      t === (from ?? "") && targets.length > 0 ? to : t
+    );
+    await ctx.db.patch(args.eventId, {
+      codeTypes,
+      codeTypeValues: values,
+      archivedCodeTypes,
+    });
     return { renamed: targets.length };
   },
 });
@@ -255,6 +275,7 @@ export const removeType = mutation({
     await ctx.db.patch(args.eventId, {
       codeTypes: (event.codeTypes ?? []).filter((t) => t !== typeKey),
       codeTypeValues: values,
+      archivedCodeTypes: event.archivedCodeTypes?.filter((t) => t !== typeKey),
     });
     await logAudit(ctx, {
       eventId: args.eventId,
@@ -263,6 +284,52 @@ export const removeType = mutation({
       details: `Deleted block "${typeKey}": ${removed} unclaimed code(s) removed, ${kept} claimed code(s) kept`,
     });
     return { removed, kept };
+  },
+});
+
+// Archives or unarchives a code block. An archived block keeps every code
+// (claimed and unclaimed) for records and receipts, but dispenses nothing
+// until it is unarchived, so an event can be closed off once it is over.
+// System admins only.
+export const setTypeArchived = mutation({
+  args: {
+    eventId: v.id("events"),
+    codeType: v.optional(v.string()),
+    archived: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const { email: actorEmail } = await adminEmailStatus(ctx);
+    await requireAdmin(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found");
+    const codeType = args.codeType?.trim() || undefined;
+    const typeKey = codeType ?? "";
+    const codes = await ctx.db
+      .query("codes")
+      .withIndex("by_event_codeType_claimedBy", (q) =>
+        q.eq("eventId", args.eventId).eq("codeType", codeType)
+      )
+      .collect();
+    if (!event.codeTypes?.includes(typeKey) && codes.length === 0) {
+      throw new Error("This event has no such code block.");
+    }
+    const current = event.archivedCodeTypes ?? [];
+    const archivedCodeTypes = args.archived
+      ? [...new Set([...current, typeKey])]
+      : current.filter((t) => t !== typeKey);
+    const unclaimed = codes.filter((c) => c.claimedBy === undefined).length;
+    if (args.archived !== current.includes(typeKey)) {
+      await ctx.db.patch(args.eventId, { archivedCodeTypes });
+      await logAudit(ctx, {
+        eventId: args.eventId,
+        action: args.archived ? "code_block_archived" : "code_block_unarchived",
+        actorEmail: actorEmail ?? undefined,
+        details: args.archived
+          ? `Archived block "${typeKey}": ${unclaimed} unclaimed code(s) held back, ${codes.length - unclaimed} claimed code(s) kept`
+          : `Unarchived block "${typeKey}": ${unclaimed} unclaimed code(s) available again`,
+      });
+    }
+    return { unclaimed, claimed: codes.length - unclaimed };
   },
 });
 
