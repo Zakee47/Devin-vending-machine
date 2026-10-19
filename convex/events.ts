@@ -213,6 +213,7 @@ export const get = query({
     await requireEventAdmin(ctx, args.id);
     const event = await ctx.db.get(args.id);
     if (!event) return null;
+    const { isAdmin } = await adminEmailStatus(ctx);
     return {
       _id: event._id,
       _creationTime: event._creationTime,
@@ -223,7 +224,17 @@ export const get = query({
       codeTypes: event.codeTypes,
       codeTypeValues: event.codeTypeValues,
       archivedCodeTypes: event.archivedCodeTypes,
-      stripeArchiveSync: event.stripeArchiveSync,
+      // Stripe error text is for system admins only, like batch history.
+      stripeArchiveSync:
+        event.stripeArchiveSync && !isAdmin
+          ? Object.fromEntries(
+              Object.entries(event.stripeArchiveSync).map(([key, sync]) => {
+                const visible = { ...sync };
+                delete visible.error;
+                return [key, visible];
+              })
+            )
+          : event.stripeArchiveSync,
       eventDate: event.eventDate,
       eventEndDate: event.eventEndDate,
       claimInstructions: event.claimInstructions,

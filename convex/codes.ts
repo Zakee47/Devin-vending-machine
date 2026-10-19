@@ -343,8 +343,8 @@ export const setTypeArchived = mutation({
   },
 });
 
-// Codes generated through Code studio, in a stable order so the worker can
-// page through them by position.
+// Codes generated through Code studio, sorted so the worker can page through
+// them by code without skipping any when rows are deleted mid-sync.
 function stripeLinkedCodes(codes: Doc<"codes">[]) {
   return codes
     .filter((c) => c.stripeBatchId !== undefined)
@@ -388,7 +388,7 @@ async function startStripeSync(
       eventId: event._id,
       codeType,
       version,
-      cursor: 0,
+      count: true,
     });
   }
   return linked.length;
@@ -424,7 +424,7 @@ export const stripeSyncChunk = internalQuery({
     eventId: v.id("events"),
     codeType: v.optional(v.string()),
     version: v.number(),
-    cursor: v.number(),
+    after: v.optional(v.string()),
     limit: v.number(),
   },
   handler: async (ctx, args) => {
@@ -437,10 +437,13 @@ export const stripeSyncChunk = internalQuery({
         q.eq("eventId", args.eventId).eq("codeType", args.codeType)
       )
       .collect();
-    const linked = stripeLinkedCodes(codes);
+    const remaining = stripeLinkedCodes(codes).filter(
+      (c) => args.after === undefined || c.code > args.after
+    );
     const batches = new Map<Id<"stripeBatches">, Doc<"stripeBatches"> | null>();
-    const items: { code: string; promoId: string | null }[] = [];
-    for (const code of linked.slice(args.cursor, args.cursor + args.limit)) {
+    const items: { code: string; promoId: string | null; live: boolean | null }[] =
+      [];
+    for (const code of remaining.slice(0, args.limit)) {
       const batchId = code.stripeBatchId;
       if (!batchId) continue;
       if (!batches.has(batchId)) batches.set(batchId, await ctx.db.get(batchId));
@@ -448,13 +451,10 @@ export const stripeSyncChunk = internalQuery({
       items.push({
         code: code.code,
         promoId: batch?.codes.find((b) => b.code === code.code)?.id ?? null,
+        live: batch?.live ?? null,
       });
     }
-    return {
-      active: sync.active,
-      items,
-      done: args.cursor + args.limit >= linked.length,
-    };
+    return { active: sync.active, items, done: remaining.length <= args.limit };
   },
 });
 
@@ -467,12 +467,18 @@ export const stripeSyncProgress = internalMutation({
     failed: v.number(),
     error: v.optional(v.string()),
     done: v.boolean(),
+    // False for a repair pass re-applying the current state after a stale
+    // worker; it fixes Stripe but leaves the counters alone.
+    count: v.boolean(),
   },
   handler: async (ctx, args) => {
     const event = await ctx.db.get(args.eventId);
     const key = blockKey(args.codeType);
     const sync = event?.stripeArchiveSync?.[key];
-    if (!event || !sync || sync.version !== args.version) return;
+    if (!event || !sync) return null;
+    if (sync.version !== args.version)
+      return { superseded: true, version: sync.version };
+    if (!args.count) return { superseded: false, version: sync.version };
     const updated = sync.updated + args.updated;
     const failed = sync.failed + args.failed;
     const error = sync.error ?? args.error;
@@ -507,6 +513,7 @@ export const stripeSyncProgress = internalMutation({
             : ""),
       });
     }
+    return { superseded: false, version: sync.version };
   },
 });
 

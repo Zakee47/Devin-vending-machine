@@ -227,6 +227,111 @@ test("blocks with only pasted codes touch nothing in Stripe", async () => {
   expect(await sync(t, event.id)).toBeUndefined();
 });
 
+test("a code deleted between pages does not make the worker skip the next one", async () => {
+  const codes = Array.from({ length: 30 }, (_, i) => `C${String(i).padStart(2, "0")}`);
+  const { t, admin, event } = await setup(codes);
+  await admin.mutation(api.codes.setTypeArchived, {
+    eventId: event.id,
+    codeType: "Day one",
+    archived: true,
+  });
+  vi.runOnlyPendingTimers();
+  await t.finishInProgressScheduledFunctions();
+  expect(stripe.update).toHaveBeenCalledTimes(25);
+  await t.run(async (ctx) => {
+    const rows = await ctx.db
+      .query("codes")
+      .withIndex("by_event", (q) => q.eq("eventId", event.id))
+      .collect();
+    await ctx.db.delete(rows.find((row) => row.code === "C00")!._id);
+  });
+  await drain(t);
+  expect(stripe.update.mock.calls.map(([id]) => id)).toEqual(
+    codes.map((code) => `promo_${code}`),
+  );
+  expect(await sync(t, event.id)).toMatchObject({ status: "done", updated: 30 });
+});
+
+test("an unarchive during a running archive worker wins, and its reactivations are not undone", async () => {
+  const codes = Array.from({ length: 30 }, (_, i) => `C${String(i).padStart(2, "0")}`);
+  const { t, admin, event } = await setup(codes);
+  let flipped = false;
+  stripe.update.mockImplementation(async (id: string, params: { active: boolean }) => {
+    if (id === "promo_C01" && !flipped) {
+      flipped = true;
+      await admin.mutation(api.codes.setTypeArchived, {
+        eventId: event.id,
+        codeType: "Day one",
+        archived: false,
+      });
+    }
+    return { id, active: params.active };
+  });
+  await admin.mutation(api.codes.setTypeArchived, {
+    eventId: event.id,
+    codeType: "Day one",
+    archived: true,
+  });
+  await drain(t);
+  const last = new Map<string, boolean>();
+  for (const [id, params] of stripe.update.mock.calls as [string, { active: boolean }][])
+    last.set(id, params.active);
+  expect(last.size).toBe(30);
+  expect([...last.values()].every((active) => active)).toBe(true);
+  expect(await sync(t, event.id)).toMatchObject({
+    status: "done",
+    active: true,
+    updated: 30,
+    failed: 0,
+  });
+});
+
+test("codes from a batch made in the other Stripe mode are left alone and reported", async () => {
+  const { t, admin, event, batchId } = await setup();
+  await t.run((ctx) => ctx.db.patch(batchId, { live: true }));
+  await admin.mutation(api.codes.setTypeArchived, {
+    eventId: event.id,
+    codeType: "Day one",
+    archived: true,
+  });
+  await drain(t);
+  expect(stripe.update).not.toHaveBeenCalled();
+  expect(await sync(t, event.id)).toMatchObject({
+    status: "failed",
+    failed: 2,
+    error: expect.stringContaining("created in Stripe live mode"),
+  });
+});
+
+test("event admins see the sync status but not the Stripe error text", async () => {
+  const { t, admin, event } = await setup();
+  stripe.update.mockRejectedValue(new Error("Secret Stripe detail"));
+  await admin.mutation(api.codes.setTypeArchived, {
+    eventId: event.id,
+    codeType: "Day one",
+    archived: true,
+  });
+  await drain(t);
+  await t.run((ctx) =>
+    ctx.db.insert("eventAdmins", { eventId: event.id, email: "organizer@example.com" }),
+  );
+  const organizer = t.withIdentity({
+    subject: "organizer",
+    email: "organizer@example.com",
+    emailVerified: true,
+  });
+  const forOrganizer = (await organizer.query(api.events.get, { id: event.id }))!;
+  expect(forOrganizer.stripeArchiveSync?.["Day one"]).toMatchObject({
+    status: "failed",
+    failed: 2,
+  });
+  expect(forOrganizer.stripeArchiveSync?.["Day one"]).not.toHaveProperty("error");
+  const forAdmin = (await admin.query(api.events.get, { id: event.id }))!;
+  expect(forAdmin.stripeArchiveSync?.["Day one"]).toMatchObject({
+    error: "Secret Stripe detail",
+  });
+});
+
 test("event admins cannot retry a Stripe sync", async () => {
   const { t, event } = await setup();
   await t.run((ctx) =>
