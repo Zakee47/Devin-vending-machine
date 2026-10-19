@@ -210,6 +210,7 @@ test("without a Stripe key the sync is marked failed instead of scheduled", asyn
   expect(stripe.update).not.toHaveBeenCalled();
   expect(await sync(t, event.id)).toMatchObject({
     status: "failed",
+    failed: 2,
     error: "Stripe is not configured on this deployment.",
   });
 });

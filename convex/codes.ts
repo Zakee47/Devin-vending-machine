@@ -375,7 +375,7 @@ async function startStripeSync(
         status: configured ? "pending" : "failed",
         total: linked.length,
         updated: 0,
-        failed: 0,
+        failed: configured ? 0 : linked.length,
         ...(configured
           ? {}
           : { error: "Stripe is not configured on this deployment." }),
