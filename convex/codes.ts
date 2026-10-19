@@ -1,4 +1,11 @@
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+} from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { adminEmailStatus, requireAdmin, requireEventAdmin } from "./admins";
@@ -11,6 +18,7 @@ import {
   isArchivedType,
 } from "./blockValues";
 import { codeTerms as termsOf } from "./codeTerms";
+import { stripeMode } from "./stripeValidation";
 
 // Drop the type from the event's denormalized list when its last code is
 // removed.
@@ -318,6 +326,7 @@ export const setTypeArchived = mutation({
       ? [...new Set([...current, typeKey])]
       : current.filter((t) => t !== typeKey);
     const unclaimed = codes.filter((c) => c.claimedBy === undefined).length;
+    let stripeCodes = 0;
     if (args.archived !== current.includes(typeKey)) {
       await ctx.db.patch(args.eventId, { archivedCodeTypes });
       await logAudit(ctx, {
@@ -328,8 +337,183 @@ export const setTypeArchived = mutation({
           ? `Archived block "${typeKey}": ${unclaimed} unclaimed code(s) held back, ${codes.length - unclaimed} claimed code(s) kept`
           : `Unarchived block "${typeKey}": ${unclaimed} unclaimed code(s) available again`,
       });
+      stripeCodes = await startStripeSync(ctx, event, codeType, codes, !args.archived);
     }
-    return { unclaimed, claimed: codes.length - unclaimed };
+    return { unclaimed, claimed: codes.length - unclaimed, stripeCodes };
+  },
+});
+
+// Codes generated through Code studio, sorted so the worker can page through
+// them by code without skipping any when rows are deleted mid-sync.
+function stripeLinkedCodes(codes: Doc<"codes">[]) {
+  return codes
+    .filter((c) => c.stripeBatchId !== undefined)
+    .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+}
+
+// Mirrors the block's archive state onto its Stripe promotion codes
+// (active = !archived) through a background worker. Returns how many codes
+// the worker will update. Pasted codes have no Stripe record and are skipped.
+async function startStripeSync(
+  ctx: MutationCtx,
+  event: Doc<"events">,
+  codeType: string | undefined,
+  codes: Doc<"codes">[],
+  active: boolean
+) {
+  const linked = stripeLinkedCodes(codes);
+  if (linked.length === 0) return 0;
+  const key = blockKey(codeType);
+  const version = (event.stripeArchiveSync?.[key]?.version ?? 0) + 1;
+  const configured = stripeMode().configured;
+  await ctx.db.patch(event._id, {
+    stripeArchiveSync: {
+      ...(event.stripeArchiveSync ?? {}),
+      [key]: {
+        version,
+        active,
+        status: configured ? "pending" : "failed",
+        total: linked.length,
+        updated: 0,
+        failed: configured ? 0 : linked.length,
+        ...(configured
+          ? {}
+          : { error: "Stripe is not configured on this deployment." }),
+        at: Date.now(),
+      },
+    },
+  });
+  if (configured) {
+    await ctx.scheduler.runAfter(0, internal.stripeWorker.setBlockActive, {
+      eventId: event._id,
+      codeType,
+      version,
+      count: true,
+    });
+  }
+  return linked.length;
+}
+
+export const retryStripeSync = mutation({
+  args: { eventId: v.id("events"), codeType: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found");
+    const codeType = args.codeType?.trim() || undefined;
+    const codes = await ctx.db
+      .query("codes")
+      .withIndex("by_event_codeType_claimedBy", (q) =>
+        q.eq("eventId", args.eventId).eq("codeType", codeType)
+      )
+      .collect();
+    return {
+      stripeCodes: await startStripeSync(
+        ctx,
+        event,
+        codeType,
+        codes,
+        !isArchivedType(event, codeType)
+      ),
+    };
+  },
+});
+
+export const stripeSyncChunk = internalQuery({
+  args: {
+    eventId: v.id("events"),
+    codeType: v.optional(v.string()),
+    version: v.number(),
+    after: v.optional(v.string()),
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const event = await ctx.db.get(args.eventId);
+    const sync = event?.stripeArchiveSync?.[blockKey(args.codeType)];
+    if (!event || !sync || sync.version !== args.version) return null;
+    const codes = await ctx.db
+      .query("codes")
+      .withIndex("by_event_codeType_claimedBy", (q) =>
+        q.eq("eventId", args.eventId).eq("codeType", args.codeType)
+      )
+      .collect();
+    const remaining = stripeLinkedCodes(codes).filter(
+      (c) => args.after === undefined || c.code > args.after
+    );
+    const batches = new Map<Id<"stripeBatches">, Doc<"stripeBatches"> | null>();
+    const items: { code: string; promoId: string | null; live: boolean | null }[] =
+      [];
+    for (const code of remaining.slice(0, args.limit)) {
+      const batchId = code.stripeBatchId;
+      if (!batchId) continue;
+      if (!batches.has(batchId)) batches.set(batchId, await ctx.db.get(batchId));
+      const batch = batches.get(batchId);
+      items.push({
+        code: code.code,
+        promoId: batch?.codes.find((b) => b.code === code.code)?.id ?? null,
+        live: batch?.live ?? null,
+      });
+    }
+    return { active: sync.active, items, done: remaining.length <= args.limit };
+  },
+});
+
+export const stripeSyncProgress = internalMutation({
+  args: {
+    eventId: v.id("events"),
+    codeType: v.optional(v.string()),
+    version: v.number(),
+    updated: v.number(),
+    failed: v.number(),
+    error: v.optional(v.string()),
+    done: v.boolean(),
+    // False for a repair pass re-applying the current state after a stale
+    // worker; it fixes Stripe but leaves the counters alone.
+    count: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const event = await ctx.db.get(args.eventId);
+    const key = blockKey(args.codeType);
+    const sync = event?.stripeArchiveSync?.[key];
+    if (!event || !sync) return null;
+    if (sync.version !== args.version)
+      return { superseded: true, version: sync.version };
+    if (!args.count) return { superseded: false, version: sync.version };
+    const updated = sync.updated + args.updated;
+    const failed = sync.failed + args.failed;
+    const error = sync.error ?? args.error;
+    await ctx.db.patch(args.eventId, {
+      stripeArchiveSync: {
+        ...event.stripeArchiveSync,
+        [key]: {
+          ...sync,
+          updated,
+          failed,
+          ...(error !== undefined ? { error } : {}),
+          status: !args.done
+            ? "pending"
+            : failed > 0 || error !== undefined
+              ? "failed"
+              : "done",
+          at: Date.now(),
+        },
+      },
+    });
+    if (args.done) {
+      const verb = sync.active ? "reactivated" : "deactivated";
+      await logAudit(ctx, {
+        eventId: args.eventId,
+        action: sync.active
+          ? "stripe_codes_reactivated"
+          : "stripe_codes_deactivated",
+        details:
+          `${updated} of ${sync.total} Stripe promotion code(s) in block "${key}" ${verb}` +
+          (failed > 0 || error !== undefined
+            ? `, ${failed} failed${error ? `: ${error}` : ""}`
+            : ""),
+      });
+    }
+    return { superseded: false, version: sync.version };
   },
 });
 

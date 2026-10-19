@@ -128,6 +128,7 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
   const removeCodeType = useMutation(api.codes.removeType);
   const setTypeValue = useMutation(api.codes.setTypeValue);
   const setTypeArchived = useMutation(api.codes.setTypeArchived);
+  const retryStripeSync = useMutation(api.codes.retryStripeSync);
 
   const [emailInput, setEmailInput] = useState("");
   const [emailSearch, setEmailSearch] = useState("");
@@ -1190,7 +1191,11 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
               codeTerms={codeTerms}
               values={event.codeTypeValues}
               archived={event.archivedCodeTypes ?? []}
+              stripeSync={event.stripeArchiveSync}
               canArchive={isGlobalAdmin}
+              onRetryStripe={(codeType) =>
+                retryStripeSync({ eventId: id, codeType })
+              }
               onArchive={async (codeType, archived) => {
                 const res = await setTypeArchived({
                   eventId: id,
@@ -1400,8 +1405,10 @@ function CodeBlocks({
   codeTerms,
   values,
   archived,
+  stripeSync,
   canArchive,
   onArchive,
+  onRetryStripe,
   onRename,
   onSetValue,
   onDelete,
@@ -1411,11 +1418,13 @@ function CodeBlocks({
   codeTerms: (CodeTerms & { code: string })[] | undefined;
   values: Record<string, string> | undefined;
   archived: string[];
+  stripeSync: Record<string, StripeSync> | undefined;
   canArchive: boolean;
   onArchive: (
     codeType: string | undefined,
     archived: boolean
-  ) => Promise<{ unclaimed: number; claimed: number }>;
+  ) => Promise<ArchiveResult>;
+  onRetryStripe: (codeType: string | undefined) => Promise<unknown>;
   onRename: (from: string | undefined, to: string) => Promise<unknown>;
   onSetValue: (
     codeType: string | undefined,
@@ -1435,8 +1444,10 @@ function CodeBlocks({
       terms={terms}
       value={values?.[blockKey(type)]}
       archived={isArchived}
+      stripeSync={stripeSync?.[blockKey(type)]}
       canArchive={canArchive}
       onArchive={onArchive}
+      onRetryStripe={onRetryStripe}
       onRename={onRename}
       onSetValue={onSetValue}
       onDelete={onDelete}
@@ -1461,8 +1472,8 @@ function CodeBlocks({
           </summary>
           <div className="flex flex-col gap-2 border-t border-border p-2">
             <p className="px-1 text-xs text-muted-foreground">
-              Archived blocks dispense no codes. Claimed codes stay with their
-              attendees.
+              Archived blocks dispense no codes, and their Stripe promotion
+              codes are deactivated. Claimed codes stay with their attendees.
             </p>
             {closed.map((type) => row(type, true))}
           </div>
@@ -1478,8 +1489,10 @@ function CodeBlockRow({
   terms,
   value,
   archived,
+  stripeSync,
   canArchive,
   onArchive,
+  onRetryStripe,
   onRename,
   onSetValue,
   onDelete,
@@ -1489,11 +1502,13 @@ function CodeBlockRow({
   terms: Map<string, CodeTerms>;
   value?: string;
   archived: boolean;
+  stripeSync: StripeSync | undefined;
   canArchive: boolean;
   onArchive: (
     codeType: string | undefined,
     archived: boolean
-  ) => Promise<{ unclaimed: number; claimed: number }>;
+  ) => Promise<ArchiveResult>;
+  onRetryStripe: (codeType: string | undefined) => Promise<unknown>;
   onRename: (from: string | undefined, to: string) => Promise<unknown>;
   onSetValue: (
     codeType: string | undefined,
@@ -1560,11 +1575,18 @@ function CodeBlockRow({
   async function handleArchive(next: boolean) {
     setArchiving(true);
     try {
-      const { unclaimed } = await onArchive(type || undefined, next);
+      const { unclaimed, stripeCodes } = await onArchive(
+        type || undefined,
+        next
+      );
+      const stripeNote =
+        stripeCodes > 0
+          ? `, ${next ? "deactivating" : "reactivating"} ${stripeCodes} in Stripe`
+          : "";
       toast.success(
         next
-          ? `Archived block${type ? ` “${type}”` : ""}: ${unclaimed} unclaimed code${unclaimed === 1 ? "" : "s"} held back`
-          : `Unarchived block${type ? ` “${type}”` : ""}: ${unclaimed} code${unclaimed === 1 ? "" : "s"} available again`
+          ? `Archived block${type ? ` “${type}”` : ""}: ${unclaimed} unclaimed code${unclaimed === 1 ? "" : "s"} held back${stripeNote}`
+          : `Unarchived block${type ? ` “${type}”` : ""}: ${unclaimed} code${unclaimed === 1 ? "" : "s"} available again${stripeNote}`
       );
     } catch (err) {
       toast.error(
@@ -1687,8 +1709,10 @@ function CodeBlockRow({
                       {available} unclaimed code{available === 1 ? "" : "s"}{" "}
                       stay{available === 1 ? "s" : ""} on record. Codes
                       already dispensed are kept, so attendees can still see
-                      their code. You can unarchive the block at any time.
-                      This does not revoke Stripe promotion codes.
+                      their code. Codes generated in Code studio are also
+                      deactivated in Stripe, so they can no longer be redeemed;
+                      pasted codes are not changed. You can unarchive the block
+                      at any time, which reactivates them.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -1798,6 +1822,81 @@ function CodeBlockRow({
               </span>
             </BlockStat>
           </dl>
+          {stripeSync ? (
+            <StripeSyncStatus
+              sync={stripeSync}
+              canRetry={canArchive}
+              onRetry={() => onRetryStripe(type || undefined)}
+            />
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+type StripeSync = NonNullable<Doc<"events">["stripeArchiveSync"]>[string];
+type ArchiveResult = { unclaimed: number; claimed: number; stripeCodes: number };
+
+function StripeSyncStatus({
+  sync,
+  canRetry,
+  onRetry,
+}: {
+  sync: StripeSync;
+  canRetry: boolean;
+  onRetry: () => Promise<unknown>;
+}) {
+  const [retrying, setRetrying] = useState(false);
+  const verb = sync.active ? "reactivat" : "deactivat";
+  const plural = sync.total === 1 ? "" : "s";
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border px-3 py-1.5 text-xs",
+        sync.status === "failed" ? "text-destructive" : "text-muted-foreground"
+      )}
+    >
+      {sync.status === "pending" ? (
+        <>
+          <Spinner className="size-3" />
+          <span>
+            Stripe: {verb}ing {sync.total} promotion code{plural}…
+          </span>
+        </>
+      ) : sync.status === "done" ? (
+        <span>
+          Stripe: {sync.updated} promotion code{plural} {verb}ed
+        </span>
+      ) : (
+        <>
+          <span>
+            Stripe: {sync.updated} of {sync.total} promotion code{plural}{" "}
+            {verb}ed, {sync.failed} failed
+            {sync.error ? `: ${sync.error}` : ""}
+          </span>
+          {canRetry ? (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={retrying}
+              onClick={async () => {
+                setRetrying(true);
+                try {
+                  await onRetry();
+                } catch (err) {
+                  toast.error(
+                    err instanceof Error ? err.message : "Failed to retry"
+                  );
+                } finally {
+                  setRetrying(false);
+                }
+              }}
+            >
+              {retrying ? <Spinner data-icon="inline-start" /> : null}
+              Retry
+            </Button>
+          ) : null}
         </>
       )}
     </div>

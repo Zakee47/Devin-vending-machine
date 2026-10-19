@@ -7,6 +7,7 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { truncateStripeBatchName } from "../lib/stripe-name";
+import { STRIPE_SYNC_CHUNK, stripeMode } from "./stripeValidation";
 
 function promotionCode(
   seed: string,
@@ -128,6 +129,94 @@ export const generate = internalAction({
         ...args,
         error:
           "Generation stopped. Saved codes are safe. Check Stripe permissions and configuration, then retry this batch to resume without duplicates.",
+      });
+    }
+  },
+});
+
+// Flips `active` on one page of a block's promotion codes, then schedules the
+// next page. A newer archive/unarchive bumps the sync version; when that
+// happens after this worker already fetched its page, its Stripe writes are
+// stale, so it starts a repair pass over the whole block for the new version.
+export const setBlockActive = internalAction({
+  args: {
+    eventId: v.id("events"),
+    codeType: v.optional(v.string()),
+    version: v.number(),
+    after: v.optional(v.string()),
+    count: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const report = (progress: {
+      updated: number;
+      failed: number;
+      error?: string;
+      done: boolean;
+    }) =>
+      ctx.runMutation(internal.codes.stripeSyncProgress, {
+        eventId: args.eventId,
+        codeType: args.codeType,
+        version: args.version,
+        count: args.count,
+        ...progress,
+      });
+    try {
+      const chunk = await ctx.runQuery(internal.codes.stripeSyncChunk, {
+        eventId: args.eventId,
+        codeType: args.codeType,
+        version: args.version,
+        after: args.after,
+        limit: STRIPE_SYNC_CHUNK,
+      });
+      if (!chunk) return;
+      const mode = stripeMode();
+      const stripe = new Stripe(process.env.STRIPE_API_KEY ?? "", {
+        apiVersion: "2025-08-27.basil",
+        maxNetworkRetries: 2,
+        timeout: 15_000,
+      });
+      let updated = 0;
+      let failed = 0;
+      let error: string | undefined;
+      for (const item of chunk.items) {
+        try {
+          if (!item.promoId)
+            throw new Error(`No Stripe promotion code recorded for ${item.code}`);
+          if (item.live !== null && item.live !== mode.live)
+            throw new Error(
+              `${item.code} was created in Stripe ${item.live ? "live" : "test"} mode, but this deployment's key is for ${mode.live ? "live" : "test"} mode`,
+            );
+          await stripe.promotionCodes.update(item.promoId, {
+            active: chunk.active,
+          });
+          updated++;
+        } catch (err) {
+          failed++;
+          error ??= err instanceof Error ? err.message : String(err);
+        }
+      }
+      const progress = await report({ updated, failed, error, done: chunk.done });
+      if (!progress) return;
+      if (progress.superseded) {
+        await ctx.scheduler.runAfter(0, internal.stripeWorker.setBlockActive, {
+          eventId: args.eventId,
+          codeType: args.codeType,
+          version: progress.version,
+          count: false,
+        });
+        return;
+      }
+      if (!chunk.done)
+        await ctx.scheduler.runAfter(0, internal.stripeWorker.setBlockActive, {
+          ...args,
+          after: chunk.items[chunk.items.length - 1]?.code ?? args.after,
+        });
+    } catch (err) {
+      await report({
+        updated: 0,
+        failed: 0,
+        error: err instanceof Error ? err.message : String(err),
+        done: true,
       });
     }
   },

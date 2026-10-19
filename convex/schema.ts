@@ -84,6 +84,27 @@ export default defineSchema({
     // Code blocks (by type key, "" = unnamed) that no longer dispense codes,
     // e.g. after the event ended. Their codes stay for records and receipts.
     archivedCodeTypes: v.optional(v.array(v.string())),
+    // Progress of mirroring a block's archive state onto its Stripe
+    // promotion codes, keyed by blockKey.
+    stripeArchiveSync: v.optional(
+      v.record(
+        v.string(),
+        v.object({
+          version: v.number(),
+          active: v.boolean(),
+          status: v.union(
+            v.literal("pending"),
+            v.literal("done"),
+            v.literal("failed")
+          ),
+          total: v.number(),
+          updated: v.number(),
+          failed: v.number(),
+          error: v.optional(v.string()),
+          at: v.number(),
+        })
+      )
+    ),
   }).index("by_slug", ["slug"]),
 
   // The X handle Clerk reports for a user, copied server-side from Clerk's

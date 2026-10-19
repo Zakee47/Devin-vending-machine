@@ -33,6 +33,9 @@ export type GenerationInput = {
   requestId: string;
 };
 
+// Promotion codes updated per worker run when mirroring archive state.
+export const STRIPE_SYNC_CHUNK = 25;
+
 export function stripeMode() {
   const match = /^(?:sk|rk)_(live|test)_\S+$/.exec(
     process.env.STRIPE_API_KEY ?? "",
