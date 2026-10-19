@@ -6,7 +6,7 @@ import { attachBatchToEvent, startBatch } from "./stripeBatchModel";
 import { generationFields } from "./stripeValidation";
 import { notExpired } from "./codeExpiry";
 import { codeTerms } from "./codeTerms";
-import { blockKey } from "./blockValues";
+import { blockKey, isArchivedType } from "./blockValues";
 import type { CodeTerms } from "../lib/block-value";
 import { isBlacklisted } from "./blacklist";
 import { eventIdentity, resolveViewer, viewerIdentityKeys } from "./identity";
@@ -140,7 +140,9 @@ export const getBySlug = query({
     // have a single unnamed pool.
     const viewer = await resolveViewer(ctx, event);
     const viewerKey = viewer.ok ? viewer.key : undefined;
-    const candidateTypes = event.codeTypes ?? [""];
+    const candidateTypes = (event.codeTypes ?? [""]).filter(
+      (t) => !isArchivedType(event, t)
+    );
     const availableTypes = new Set<string>();
     // Terms of the code each block would dispense next, for the type picker.
     const codeTypeTerms: Record<string, CodeTerms> = {};
@@ -169,7 +171,7 @@ export const getBySlug = query({
         .filter(notExpired)
         .filter((q) => q.eq(q.field("claimedBy"), undefined))
         .first();
-      if (reserved) {
+      if (reserved && !isArchivedType(event, reserved.codeType)) {
         const typeKey = reserved.codeType ?? "";
         availableTypes.add(typeKey);
         // claims.claim dispenses the viewer's reservation first.
@@ -220,6 +222,7 @@ export const get = query({
       creditAmount: event.creditAmount,
       codeTypes: event.codeTypes,
       codeTypeValues: event.codeTypeValues,
+      archivedCodeTypes: event.archivedCodeTypes,
       eventDate: event.eventDate,
       eventEndDate: event.eventEndDate,
       claimInstructions: event.claimInstructions,

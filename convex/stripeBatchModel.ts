@@ -3,7 +3,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { requireAdmin } from "./admins";
-import { activeCodeTypes, blockKey } from "./blockValues";
+import { activeCodeTypes, blockKey, isArchivedType } from "./blockValues";
 import { logAudit } from "./auditLog";
 import { validateGeneration, type GenerationInput } from "./stripeValidation";
 import { generateStripeCodePrefix } from "../lib/stripe-name";
@@ -122,6 +122,10 @@ async function resolveDestination(
   const codeType = requestedType?.trim() ?? batch.name;
   if (codeType.length > 80)
     return { error: "Block names must be 80 characters or fewer." } as const;
+  if (isArchivedType(event, codeType))
+    return {
+      error: "This code block is archived. Unarchive it before adding codes.",
+    } as const;
   const existing = await ctx.db
     .query("codes")
     .withIndex("by_event", (q) => q.eq("eventId", eventId))

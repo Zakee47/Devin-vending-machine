@@ -33,6 +33,15 @@ export function activeCodeTypes(
   ];
 }
 
+// Whether a block has been archived by a system admin, so none of its codes
+// are dispensed (not even reserved ones) until it is unarchived.
+export function isArchivedType(
+  event: { archivedCodeTypes?: string[] },
+  codeType: string | undefined
+): boolean {
+  return event.archivedCodeTypes?.includes(codeType ?? "") ?? false;
+}
+
 // The value shown for a code is its block's value, falling back to the
 // legacy event-wide creditAmount for events created before per-block values.
 export function blockValue(

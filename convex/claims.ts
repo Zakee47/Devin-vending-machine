@@ -9,7 +9,7 @@ import type { Doc } from "./_generated/dataModel";
 import { isEventAdmin, requireEventAdmin } from "./admins";
 import { logAudit } from "./auditLog";
 import { isBlacklisted } from "./blacklist";
-import { blockValue } from "./blockValues";
+import { blockValue, isArchivedType } from "./blockValues";
 import { codeTerms } from "./codeTerms";
 import { dropTypeIfEmpty } from "./codes";
 import { notExpired } from "./codeExpiry";
@@ -31,12 +31,26 @@ async function findParticipantRow(
 }
 
 // The unclaimed, unreserved, unexpired code an attendee would receive next,
-// optionally restricted to one block.
+// optionally restricted to one block. Archived blocks never dispense; when
+// the event has any, an unrestricted request probes its other blocks instead
+// of taking the first unclaimed code in the pool.
 async function nextAvailable(
   ctx: QueryCtx | MutationCtx,
   event: Doc<"events">,
   requestedType: string | undefined
-) {
+): Promise<Doc<"codes"> | null> {
+  if (requestedType !== undefined && isArchivedType(event, requestedType)) {
+    return null;
+  }
+  const hasArchived = (event.archivedCodeTypes?.length ?? 0) > 0;
+  if (requestedType === undefined && hasArchived) {
+    for (const typeKey of event.codeTypes ?? [""]) {
+      if (isArchivedType(event, typeKey)) continue;
+      const hit = await nextAvailable(ctx, event, typeKey || undefined);
+      if (hit) return hit;
+    }
+    return null;
+  }
   const codes =
     requestedType !== undefined
       ? ctx.db
@@ -105,7 +119,9 @@ export const eligibility = query({
     const blocked = row?.blockedAt !== undefined;
     const allowed = row && !blocked ? row : null;
     if (previewing) {
-      const codeTypes = event.codeTypes ?? [];
+      const codeTypes = (event.codeTypes ?? []).filter(
+        (t) => !isArchivedType(event, t)
+      );
       const options = codeTypes.length > 1 ? codeTypes : [undefined];
       const previewCodes = await Promise.all(
         options.map(async (codeType) => {
@@ -287,8 +303,10 @@ export const claim = mutation({
       .filter(notExpired)
       .filter((q) => q.eq(q.field("claimedBy"), undefined))
       .first();
+    const usableReservation =
+      reserved && !isArchivedType(event, reserved.codeType) ? reserved : null;
     const available =
-      reserved ?? (await nextAvailable(ctx, event, requestedType));
+      usableReservation ?? (await nextAvailable(ctx, event, requestedType));
     if (!available) {
       return {
         ok: false as const,

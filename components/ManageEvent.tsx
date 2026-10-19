@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   ArrowUpRight,
   Ban,
@@ -31,7 +33,11 @@ import { toast } from "sonner";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { activeCodeTypes, blockKey } from "@/convex/blockValues";
+import {
+  activeCodeTypes,
+  blockKey,
+  isArchivedType,
+} from "@/convex/blockValues";
 import { blockTermsSummary, type CodeTerms } from "@/lib/block-value";
 import { downloadCsv } from "@/lib/csv";
 import { slugify } from "@/lib/slug";
@@ -121,6 +127,7 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
   const renameCodeType = useMutation(api.codes.renameType);
   const removeCodeType = useMutation(api.codes.removeType);
   const setTypeValue = useMutation(api.codes.setTypeValue);
+  const setTypeArchived = useMutation(api.codes.setTypeArchived);
 
   const [emailInput, setEmailInput] = useState("");
   const [emailSearch, setEmailSearch] = useState("");
@@ -152,10 +159,15 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
   // selected existing block, or into a new named block when only one exists.
   // Blocks are ordered by when each was first created, not alphabetically.
   const blockTypes = event ? activeCodeTypes(event, codes ?? []) : [];
+  // Archived blocks keep their place in the two-block limit but take no new
+  // codes, so they are left out of the add form's targets.
+  const openBlockTypes = event
+    ? blockTypes.filter((t) => !isArchivedType(event, t))
+    : [];
   // Target values are namespaced ("existing:<type>" / "new") so a block
   // whose name matches a sentinel can't be confused with new-block creation.
   const targetOptions = [
-    ...blockTypes.map((t) => `existing:${t}`),
+    ...openBlockTypes.map((t) => `existing:${t}`),
     ...(blockTypes.length < 2 ? ["new"] : []),
   ];
   const effectiveTarget =
@@ -1163,6 +1175,21 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
               codes={codes}
               codeTerms={codeTerms}
               values={event.codeTypeValues}
+              archived={event.archivedCodeTypes ?? []}
+              canArchive={isGlobalAdmin}
+              onArchive={async (codeType, archived) => {
+                const res = await setTypeArchived({
+                  eventId: id,
+                  codeType,
+                  archived,
+                });
+                if (archived) {
+                  setBlockTarget((prev) =>
+                    prev === `existing:${codeType ?? ""}` ? null : prev
+                  );
+                }
+                return res;
+              }}
               onSetValue={(codeType, value) =>
                 setTypeValue({ eventId: id, codeType, value })
               }
@@ -1187,7 +1214,7 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                 <Field>
                   <FieldLabel>Add codes to</FieldLabel>
                   <div className="flex flex-wrap gap-2">
-                    {blockTypes.map((t) => (
+                    {openBlockTypes.map((t) => (
                       <Button
                         key={t || "__unnamed"}
                         type="button"
@@ -1220,6 +1247,12 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                       : "This event has both code blocks. Pasted and uploaded codes go into the selected one."}
                   </FieldDescription>
                 </Field>
+              ) : null}
+              {hasBlocks && openBlockTypes.length === 0 && !isNewBlock ? (
+                <FieldDescription>
+                  Every block on this event is archived. Unarchive one to add
+                  codes to it.
+                </FieldDescription>
               ) : null}
               {!hasBlocks || isNewBlock ? (
                 <Field>
@@ -1330,6 +1363,9 @@ function CodeBlocks({
   codes,
   codeTerms,
   values,
+  archived,
+  canArchive,
+  onArchive,
   onRename,
   onSetValue,
   onDelete,
@@ -1338,6 +1374,12 @@ function CodeBlocks({
   codes: Doc<"codes">[] | undefined;
   codeTerms: (CodeTerms & { code: string })[] | undefined;
   values: Record<string, string> | undefined;
+  archived: string[];
+  canArchive: boolean;
+  onArchive: (
+    codeType: string | undefined,
+    archived: boolean
+  ) => Promise<{ unclaimed: number; claimed: number }>;
   onRename: (from: string | undefined, to: string) => Promise<unknown>;
   onSetValue: (
     codeType: string | undefined,
@@ -1349,20 +1391,47 @@ function CodeBlocks({
 }) {
   if (types.length === 0) return null;
   const terms = new Map(codeTerms?.map((t) => [t.code, t]));
+  const row = (type: string, isArchived: boolean) => (
+    <CodeBlockRow
+      key={type || "__unnamed"}
+      type={type}
+      codes={codes?.filter((c) => (c.codeType ?? "") === type) ?? []}
+      terms={terms}
+      value={values?.[blockKey(type)]}
+      archived={isArchived}
+      canArchive={canArchive}
+      onArchive={onArchive}
+      onRename={onRename}
+      onSetValue={onSetValue}
+      onDelete={onDelete}
+    />
+  );
+  const open = types.filter((t) => !archived.includes(t));
+  const closed = types.filter((t) => archived.includes(t));
   return (
     <div className="flex flex-col gap-2">
-      {types.map((type) => (
-          <CodeBlockRow
-            key={type || "__unnamed"}
-            type={type}
-            codes={codes?.filter((c) => (c.codeType ?? "") === type) ?? []}
-            terms={terms}
-            value={values?.[blockKey(type)]}
-            onRename={onRename}
-            onSetValue={onSetValue}
-            onDelete={onDelete}
-          />
-        ))}
+      {open.map((type) => row(type, false))}
+      {closed.length > 0 ? (
+        <details className="group rounded-lg border border-dashed border-border">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden">
+            <Archive className="size-4 shrink-0" aria-hidden />
+            <span>
+              Archived ({closed.length} block{closed.length === 1 ? "" : "s"})
+            </span>
+            <span className="ml-auto text-xs group-open:hidden">Show</span>
+            <span className="ml-auto hidden text-xs group-open:inline">
+              Hide
+            </span>
+          </summary>
+          <div className="flex flex-col gap-2 border-t border-border p-2">
+            <p className="px-1 text-xs text-muted-foreground">
+              Archived blocks dispense no codes. Claimed codes stay with their
+              attendees.
+            </p>
+            {closed.map((type) => row(type, true))}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -1372,6 +1441,9 @@ function CodeBlockRow({
   codes,
   terms,
   value,
+  archived,
+  canArchive,
+  onArchive,
   onRename,
   onSetValue,
   onDelete,
@@ -1380,6 +1452,12 @@ function CodeBlockRow({
   codes: Doc<"codes">[];
   terms: Map<string, CodeTerms>;
   value?: string;
+  archived: boolean;
+  canArchive: boolean;
+  onArchive: (
+    codeType: string | undefined,
+    archived: boolean
+  ) => Promise<{ unclaimed: number; claimed: number }>;
   onRename: (from: string | undefined, to: string) => Promise<unknown>;
   onSetValue: (
     codeType: string | undefined,
@@ -1393,6 +1471,7 @@ function CodeBlockRow({
   const [name, setName] = useState(type);
   const [valueInput, setValueInput] = useState(value ?? "");
   const [busy, setBusy] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const count = codes.length;
   const claimed = codes.filter((c) => c.claimedBy !== undefined).length;
   const available = count - claimed;
@@ -1442,8 +1521,33 @@ function CodeBlockRow({
     }
   }
 
+  async function handleArchive(next: boolean) {
+    setArchiving(true);
+    try {
+      const { unclaimed } = await onArchive(type || undefined, next);
+      toast.success(
+        next
+          ? `Archived block${type ? ` “${type}”` : ""}: ${unclaimed} unclaimed code${unclaimed === 1 ? "" : "s"} held back`
+          : `Unarchived block${type ? ` “${type}”` : ""}: ${unclaimed} code${unclaimed === 1 ? "" : "s"} available again`
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : `Failed to ${next ? "archive" : "unarchive"} code block`
+      );
+    } finally {
+      setArchiving(false);
+    }
+  }
+
   return (
-    <div className="rounded-lg border border-border bg-surface">
+    <div
+      className={cn(
+        "rounded-lg border border-border bg-surface",
+        archived && "opacity-80"
+      )}
+    >
       {editing ? (
         <form
           onSubmit={handleSave}
@@ -1494,6 +1598,7 @@ function CodeBlockRow({
             >
               {type || "Unnamed block"}
             </span>
+            {archived ? <Badge variant="secondary">Archived</Badge> : null}
             <Button
               size="xs"
               variant="ghost"
@@ -1502,6 +1607,63 @@ function CodeBlockRow({
             >
               Edit
             </Button>
+            {canArchive && archived ? (
+              <Button
+                size="xs"
+                variant="ghost"
+                className="text-muted-foreground"
+                disabled={archiving}
+                onClick={() => handleArchive(false)}
+              >
+                {archiving ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <ArchiveRestore data-icon="inline-start" />
+                )}
+                Unarchive
+              </Button>
+            ) : canArchive ? (
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="text-muted-foreground"
+                      disabled={archiving}
+                    />
+                  }
+                >
+                  {archiving ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <Archive data-icon="inline-start" />
+                  )}
+                  Archive
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Archive the &ldquo;{type || "Unnamed"}&rdquo; block?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Attendees can no longer claim from this block, and its{" "}
+                      {available} unclaimed code{available === 1 ? "" : "s"}{" "}
+                      stay{available === 1 ? "s" : ""} on record. Codes
+                      already dispensed are kept, so attendees can still see
+                      their code. You can unarchive the block at any time.
+                      This does not revoke Stripe promotion codes.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleArchive(true)}>
+                      Archive block
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : null}
             <AlertDialog>
               <AlertDialogTrigger
                 render={
