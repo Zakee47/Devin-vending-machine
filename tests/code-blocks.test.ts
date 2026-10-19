@@ -353,3 +353,25 @@ test("approving an access request never reserves a code from an archived block",
   );
   expect(reserved).toEqual([]);
 });
+
+test("a second block can be created while the only block is archived", async () => {
+  const { admin, event } = await setup();
+  await admin.mutation(api.codes.add, {
+    eventId: event.id,
+    codes: ["A"],
+    codeType: "Day one",
+  });
+  await admin.mutation(api.codes.setTypeArchived, {
+    eventId: event.id,
+    codeType: "Day one",
+    archived: true,
+  });
+  await admin.mutation(api.codes.add, {
+    eventId: event.id,
+    codes: ["B"],
+    codeType: "Day two",
+  });
+  const updated = (await admin.query(api.events.get, { id: event.id }))!;
+  expect(updated.codeTypes).toEqual(["Day one", "Day two"]);
+  expect(updated.archivedCodeTypes).toEqual(["Day one"]);
+});

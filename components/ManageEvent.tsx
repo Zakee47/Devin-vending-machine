@@ -179,7 +179,10 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
     ? null
     : effectiveTarget.slice("existing:".length);
   const hasBlocks = blockTypes.length > 0;
-  const allBlocksArchived = hasBlocks && openBlockTypes.length === 0;
+  // With both blocks archived nothing can take new codes; with one archived
+  // block the add form still offers the free second slot.
+  const allBlocksArchived =
+    openBlockTypes.length === 0 && blockTypes.length >= 2;
   // A second block requires both blocks to be named, so creating one next to
   // an unnamed block also asks for the existing block's name.
   const needsFirstBlockName =
