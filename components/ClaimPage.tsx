@@ -12,6 +12,7 @@ import {
   Copy,
   Eye,
   LogIn,
+  Mail,
   OctagonX,
   PackageOpen,
   QrCode,
@@ -312,6 +313,7 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
             <Receipt
               eventName={event.name}
               instructions={event.claimInstructions}
+              contactEmail={event.contactEmail}
               creditAmount={result.creditAmount}
               terms={result.terms}
               code={result.code}
@@ -325,6 +327,7 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
             <Receipt
               eventName={event.name}
               instructions={event.claimInstructions}
+              contactEmail={event.contactEmail}
               creditAmount={eligibility.claimed.creditAmount}
               terms={eligibility.claimed.terms}
               code={eligibility.claimed.code}
@@ -428,6 +431,15 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
                             : "Sign in to claim"}
                       </Button>
                     </SignInButton>
+                    {event.contactEmail ? (
+                      <GetInTouch
+                        email={event.contactEmail}
+                        eventName={event.name}
+                        variant="ghost"
+                        size="sm"
+                        className="self-center text-muted-foreground"
+                      />
+                    ) : null}
                   </div>
                 ) : eligibility === undefined || xPending ? (
                   <div className="flex flex-col gap-3">
@@ -476,6 +488,14 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
                         )}
                       </AlertDescription>
                     </Alert>
+                    {event.contactEmail ? (
+                      <GetInTouch
+                        email={event.contactEmail}
+                        eventName={event.name}
+                        variant="outline"
+                        className="self-start"
+                      />
+                    ) : null}
                     <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                       <span className="min-w-0 truncate">
                         Signed in as{" "}
@@ -672,6 +692,15 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
                         Get started with Devin
                         <ArrowRight data-icon="inline-end" aria-hidden />
                       </Button>
+                      {event.contactEmail ? (
+                        <GetInTouch
+                          email={event.contactEmail}
+                          eventName={event.name}
+                          variant="ghost"
+                          size="sm"
+                          className="self-center text-muted-foreground"
+                        />
+                      ) : null}
                     </div>
                     <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                       <span className="min-w-0 truncate">
@@ -731,6 +760,81 @@ function SoldOutNotice({
           : `If you already claimed one with a different ${identityNoun}, switch accounts and it will still be here.`}
       </AlertDescription>
     </Alert>
+  );
+}
+
+function GetInTouch({
+  email,
+  eventName,
+  variant,
+  size,
+  className,
+}: {
+  email: string;
+  eventName: string;
+  variant: "outline" | "ghost";
+  size?: "sm" | "lg";
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const mailto = `mailto:${email}?subject=${encodeURIComponent(
+    `${eventName}: question about my code`
+  )}`;
+  async function copy() {
+    if (await copyText(email)) {
+      setCopied(true);
+      toast.success("Email address copied");
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      toast.error("Couldn't copy the address");
+    }
+  }
+  return (
+    <Dialog>
+      <DialogTrigger
+        render={<Button variant={variant} size={size} className={className} />}
+      >
+        <Mail data-icon="inline-start" aria-hidden />
+        Get in touch
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="font-heading tracking-tight">
+            Get in touch
+          </DialogTitle>
+          <DialogDescription>
+            Questions about {eventName} or your code? Email the organizers.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="rounded-lg border border-border bg-surface px-4 py-3 font-mono text-sm break-all select-all">
+          {email}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            variant="brand"
+            className="flex-1"
+            render={<a href={mailto} />}
+            nativeButton={false}
+          >
+            <Mail data-icon="inline-start" aria-hidden />
+            Open email app
+          </Button>
+          <Button variant="outline" className="flex-1" onClick={copy}>
+            {copied ? (
+              <>
+                <Check data-icon="inline-start" aria-hidden />
+                Copied
+              </>
+            ) : (
+              <>
+                <Copy data-icon="inline-start" aria-hidden />
+                Copy address
+              </>
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -855,6 +959,7 @@ function CodeValue({
 function Receipt({
   eventName,
   instructions,
+  contactEmail,
   creditAmount,
   terms,
   code,
@@ -866,6 +971,7 @@ function Receipt({
 }: {
   eventName: string;
   instructions?: string;
+  contactEmail?: string;
   creditAmount?: string;
   terms?: CodeTerms;
   code: string;
@@ -974,6 +1080,15 @@ function Receipt({
             Get started with Devin
             <ArrowRight data-icon="inline-end" aria-hidden />
           </Button>
+          {contactEmail ? (
+            <GetInTouch
+              email={contactEmail}
+              eventName={eventName}
+              variant="ghost"
+              size="sm"
+              className="self-center text-muted-foreground"
+            />
+          ) : null}
           <Button
             variant="ghost"
             size="sm"
