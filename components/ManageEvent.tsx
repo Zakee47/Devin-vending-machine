@@ -41,6 +41,7 @@ import {
 import { blockTermsSummary, type CodeTerms } from "@/lib/block-value";
 import { downloadCsv } from "@/lib/csv";
 import { slugify } from "@/lib/slug";
+import { mutationError } from "@/lib/stripe-form";
 import {
   EMAIL_STATUS_FILTERS,
   filterEmails,
@@ -2351,7 +2352,12 @@ function EventDetailsForm({
       setSlug(savedSlug);
       toast.success("Event saved");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
+      toast.error(
+        mutationError(
+          err,
+          err instanceof Error ? err.message : "Failed to save"
+        )
+      );
     } finally {
       setSaving(false);
     }
