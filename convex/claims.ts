@@ -244,6 +244,20 @@ export const allowReclaim = mutation({
 
 export const MAX_CLAIMANT_NAME = 120;
 
+// One line of printable text: control characters go, runs of whitespace
+// collapse, and the result is capped so lists and exports stay tidy.
+function cleanClaimantName(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  return (
+    raw
+      .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, MAX_CLAIMANT_NAME)
+      .trim() || undefined
+  );
+}
+
 export const claim = mutation({
   args: {
     slug: v.string(),
@@ -314,7 +328,9 @@ export const claim = mutation({
       };
     }
 
-    const name = args.name?.trim().slice(0, MAX_CLAIMANT_NAME) || undefined;
+    // Only dynamic events ask for a name; list events never show the field,
+    // so a name sent there is ignored rather than written onto the list.
+    const name = event.dynamic ? cleanClaimantName(args.name) : undefined;
     if (event.dynamic && !name && !allowed.name) {
       return {
         ok: false as const,

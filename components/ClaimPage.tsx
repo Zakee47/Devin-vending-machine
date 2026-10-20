@@ -31,6 +31,7 @@ import {
 } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
 import { blockKey } from "@/convex/blockValues";
+import { MAX_CLAIMANT_NAME } from "@/convex/claims";
 import { codeValueSummary, type CodeTerms } from "@/lib/block-value";
 import {
   eventCountdownLabel,
@@ -210,7 +211,10 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
   };
   const singleValue =
     event && !mustChoose ? valueFor(event.codeTypes[0] ?? "") : null;
-  const nameValue = claimantName ?? user?.fullName ?? "";
+  const nameValue = (claimantName ?? user?.fullName ?? "").slice(
+    0,
+    MAX_CLAIMANT_NAME
+  );
   const needsName = event?.dynamic === true && nameValue.trim() === "";
 
   async function handleClaim() {
@@ -692,7 +696,7 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
                           id="claimant-name"
                           autoComplete="name"
                           required
-                          maxLength={120}
+                          maxLength={MAX_CLAIMANT_NAME}
                           value={nameValue}
                           onChange={(e) => setClaimantName(e.target.value)}
                           placeholder="First and last name"

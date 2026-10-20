@@ -241,3 +241,26 @@ test("dynamic events require the claimant's name and keep it on the participant 
     alreadyClaimed: true,
   });
 });
+
+test("claimant names are flattened to one printable line and ignored on list events", async () => {
+  const dynamic = await setup({ dynamic: true, codes: ["A"] });
+  expect(
+    await dynamic.user.mutation(api.claims.claim, {
+      slug: "meetup",
+      name: " Ada\nLovelace\u0000\t  Jr. ",
+    }),
+  ).toMatchObject({ ok: true });
+  const dynamicRow = await dynamic.t.run(async (ctx) =>
+    (await ctx.db.query("emails").collect()).find((e) => e.name !== undefined),
+  );
+  expect(dynamicRow?.name).toBe("Ada Lovelace Jr.");
+
+  const listed = await setup({ dynamic: false, codes: ["A"] });
+  const email = await listed.t.run(async (ctx) =>
+    ctx.db.insert("emails", { eventId: listed.eventId, email: "walk.up@example.com" }),
+  );
+  expect(
+    await listed.user.mutation(api.claims.claim, { slug: "meetup", name: "Sneaky Name" }),
+  ).toMatchObject({ ok: true, code: "A" });
+  expect((await listed.t.run((ctx) => ctx.db.get(email)))?.name).toBeUndefined();
+});
