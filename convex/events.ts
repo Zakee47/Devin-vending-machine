@@ -599,7 +599,7 @@ export const update = mutation({
 
 // Blank clears the address; anything else must be a single plain address,
 // since it is dropped into a mailto: link (no ?cc=, #, or other URL syntax).
-const CONTACT_EMAIL_PART = "[^\\s@?#&/%<>,;:\\\\\"'()]+";
+const CONTACT_EMAIL_PART = "[^\\s@?#&/%<>,;:\\\\\"()]+";
 const CONTACT_EMAIL_RE = new RegExp(
   `^${CONTACT_EMAIL_PART}@${CONTACT_EMAIL_PART}\\.${CONTACT_EMAIL_PART}$`
 );

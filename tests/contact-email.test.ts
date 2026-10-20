@@ -85,4 +85,13 @@ test("addresses that don't look like an email are rejected", async () => {
   expect((await admin.query(api.events.get, { id: event.id }))?.contactEmail).toBe(
     "first.last+tag@sub.example.co.uk",
   );
+  await admin.mutation(api.events.update, {
+    id: event.id,
+    name: "Ok",
+    slug: "ok",
+    contactEmail: "O'Connor@Example.com",
+  });
+  expect((await admin.query(api.events.get, { id: event.id }))?.contactEmail).toBe(
+    "o'connor@example.com",
+  );
 });
