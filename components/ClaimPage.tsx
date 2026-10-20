@@ -46,6 +46,7 @@ import { SignInHint } from "@/components/SignInHint";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -122,6 +123,8 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  // Dynamic events ask who is claiming; prefilled from the Clerk profile.
+  const [claimantName, setClaimantName] = useState<string | null>(null);
   const [readOpen, setReadOpen] = useState(false);
   const [previewRead, setPreviewRead] = useState(false);
   const qrTriggerRef = useRef<HTMLButtonElement>(null);
@@ -207,6 +210,8 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
   };
   const singleValue =
     event && !mustChoose ? valueFor(event.codeTypes[0] ?? "") : null;
+  const nameValue = claimantName ?? user?.fullName ?? "";
+  const needsName = event?.dynamic === true && nameValue.trim() === "";
 
   async function handleClaim() {
     if (previewMode && event) {
@@ -239,6 +244,7 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
       const res = await claim({
         slug,
         codeType: mustChoose && selectedType ? selectedType : undefined,
+        name: event?.dynamic ? nameValue.trim() : undefined,
       });
       setResult(res);
     } catch {
@@ -674,10 +680,35 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
                         </div>
                       </fieldset>
                     ) : null}
+                    {event.dynamic ? (
+                      <div className="flex flex-col gap-1.5">
+                        <label
+                          htmlFor="claimant-name"
+                          className="text-xs font-medium text-muted-foreground"
+                        >
+                          Your name
+                        </label>
+                        <Input
+                          id="claimant-name"
+                          autoComplete="name"
+                          required
+                          maxLength={120}
+                          value={nameValue}
+                          onChange={(e) => setClaimantName(e.target.value)}
+                          placeholder="First and last name"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Required so the organizers know who claimed each
+                          code.
+                        </p>
+                      </div>
+                    ) : null}
                     <Button
                       variant="brand"
                       size="lg"
-                      disabled={submitting || (mustChoose && !selectedType)}
+                      disabled={
+                        submitting || (mustChoose && !selectedType) || needsName
+                      }
                       className="w-full"
                       onClick={handleClaim}
                       aria-busy={submitting}
