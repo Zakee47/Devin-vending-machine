@@ -65,4 +65,24 @@ test("addresses that don't look like an email are rejected", async () => {
       contactEmail: "two words@example.com",
     }),
   ).rejects.toThrow(/valid contact email/);
+  for (const sneaky of [
+    "help@example.com?cc=other@example.com",
+    "help@example.com&bcc=x@y.com",
+    "help@example.com#frag",
+    "help@example.com/path",
+    "help@example.com%0Acc",
+  ]) {
+    await expect(
+      admin.mutation(api.events.update, { id: event.id, name: "Ok", slug: "ok", contactEmail: sneaky }),
+    ).rejects.toThrow(/valid contact email/);
+  }
+  await admin.mutation(api.events.update, {
+    id: event.id,
+    name: "Ok",
+    slug: "ok",
+    contactEmail: "first.last+tag@sub.example.co.uk",
+  });
+  expect((await admin.query(api.events.get, { id: event.id }))?.contactEmail).toBe(
+    "first.last+tag@sub.example.co.uk",
+  );
 });

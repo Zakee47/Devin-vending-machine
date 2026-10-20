@@ -520,6 +520,14 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
                       eventName={event.name}
                       identityNoun={identityNoun}
                     />
+                    {event.contactEmail ? (
+                      <GetInTouch
+                        email={event.contactEmail}
+                        eventName={event.name}
+                        variant="outline"
+                        className="self-start"
+                      />
+                    ) : null}
                     <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                       <span className="min-w-0 truncate">
                         Signed in as{" "}
@@ -592,6 +600,15 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
                         </Button>
                       </DialogContent>
                     </Dialog>
+                    {event.contactEmail ? (
+                      <GetInTouch
+                        email={event.contactEmail}
+                        eventName={event.name}
+                        variant="ghost"
+                        size="sm"
+                        className="self-center text-muted-foreground"
+                      />
+                    ) : null}
                     <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                       <span className="min-w-0 truncate">
                         Signed in as{" "}
