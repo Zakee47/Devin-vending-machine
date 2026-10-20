@@ -14,6 +14,7 @@ import { codeTerms } from "./codeTerms";
 import { dropTypeIfEmpty } from "./codes";
 import { notExpired } from "./codeExpiry";
 import { resolveViewer } from "./identity";
+import { cleanClaimantName } from "../lib/claimant-name";
 
 // Participant rows are keyed by the event's identity kind: a lowercased email
 // or an "@handle" (see lib/attendee-identity.ts). Includes blocked rows.
@@ -241,22 +242,6 @@ export const allowReclaim = mutation({
     return { removed: claimed.length };
   },
 });
-
-export const MAX_CLAIMANT_NAME = 120;
-
-// One line of printable text: control characters go, runs of whitespace
-// collapse, and the result is capped so lists and exports stay tidy.
-function cleanClaimantName(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  return (
-    raw
-      .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, MAX_CLAIMANT_NAME)
-      .trim() || undefined
-  );
-}
 
 export const claim = mutation({
   args: {

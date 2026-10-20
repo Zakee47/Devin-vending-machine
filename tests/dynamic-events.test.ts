@@ -218,7 +218,7 @@ test("dynamic events require the claimant's name and keep it on the participant 
     ok: false,
     error: "Enter your name to claim your code.",
   });
-  expect(await user.mutation(api.claims.claim, { slug: "meetup", name: "   " })).toMatchObject({
+  expect(await user.mutation(api.claims.claim, { slug: "meetup", name: " \u0085\u200b " })).toMatchObject({
     ok: false,
     error: "Enter your name to claim your code.",
   });
@@ -247,7 +247,7 @@ test("claimant names are flattened to one printable line and ignored on list eve
   expect(
     await dynamic.user.mutation(api.claims.claim, {
       slug: "meetup",
-      name: " Ada\nLovelace\u0000\t  Jr. ",
+      name: " Ada\nLovelace\u0000\t \u202e Jr.\u0085",
     }),
   ).toMatchObject({ ok: true });
   const dynamicRow = await dynamic.t.run(async (ctx) =>
