@@ -218,7 +218,7 @@ test("dynamic events require the claimant's name and keep it on the participant 
     ok: false,
     error: "Enter your name to claim your code.",
   });
-  expect(await user.mutation(api.claims.claim, { slug: "meetup", name: "   " })).toMatchObject({
+  expect(await user.mutation(api.claims.claim, { slug: "meetup", name: " \u0085\u200b " })).toMatchObject({
     ok: false,
     error: "Enter your name to claim your code.",
   });
@@ -240,4 +240,27 @@ test("dynamic events require the claimant's name and keep it on the participant 
     code: "A",
     alreadyClaimed: true,
   });
+});
+
+test("claimant names are flattened to one printable line and ignored on list events", async () => {
+  const dynamic = await setup({ dynamic: true, codes: ["A"] });
+  expect(
+    await dynamic.user.mutation(api.claims.claim, {
+      slug: "meetup",
+      name: " Ada\nLovelace\u0000\t \u202e Jr.\u0085",
+    }),
+  ).toMatchObject({ ok: true });
+  const dynamicRow = await dynamic.t.run(async (ctx) =>
+    (await ctx.db.query("emails").collect()).find((e) => e.name !== undefined),
+  );
+  expect(dynamicRow?.name).toBe("Ada Lovelace Jr.");
+
+  const listed = await setup({ dynamic: false, codes: ["A"] });
+  const email = await listed.t.run(async (ctx) =>
+    ctx.db.insert("emails", { eventId: listed.eventId, email: "walk.up@example.com" }),
+  );
+  expect(
+    await listed.user.mutation(api.claims.claim, { slug: "meetup", name: "Sneaky Name" }),
+  ).toMatchObject({ ok: true, code: "A" });
+  expect((await listed.t.run((ctx) => ctx.db.get(email)))?.name).toBeUndefined();
 });

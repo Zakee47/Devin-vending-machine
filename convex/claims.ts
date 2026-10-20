@@ -14,6 +14,7 @@ import { codeTerms } from "./codeTerms";
 import { dropTypeIfEmpty } from "./codes";
 import { notExpired } from "./codeExpiry";
 import { resolveViewer } from "./identity";
+import { cleanClaimantName } from "../lib/claimant-name";
 
 // Participant rows are keyed by the event's identity kind: a lowercased email
 // or an "@handle" (see lib/attendee-identity.ts). Includes blocked rows.
@@ -242,8 +243,6 @@ export const allowReclaim = mutation({
   },
 });
 
-export const MAX_CLAIMANT_NAME = 120;
-
 export const claim = mutation({
   args: {
     slug: v.string(),
@@ -314,7 +313,9 @@ export const claim = mutation({
       };
     }
 
-    const name = args.name?.trim().slice(0, MAX_CLAIMANT_NAME) || undefined;
+    // Only dynamic events ask for a name; list events never show the field,
+    // so a name sent there is ignored rather than written onto the list.
+    const name = event.dynamic ? cleanClaimantName(args.name) : undefined;
     if (event.dynamic && !name && !allowed.name) {
       return {
         ok: false as const,
