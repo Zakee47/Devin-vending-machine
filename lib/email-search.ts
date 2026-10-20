@@ -11,7 +11,9 @@ export const EMAIL_STATUS_FILTERS: {
 
 // Case-insensitive substring match on the address (a blank query matches
 // all), optionally narrowed to addresses that have or haven't claimed a code.
-export function filterEmails<T extends { email: string; claimed?: boolean }>(
+export function filterEmails<
+  T extends { email: string; name?: string; claimed?: boolean },
+>(
   items: T[],
   query: string,
   status: EmailStatusFilter = "all"
@@ -22,6 +24,7 @@ export function filterEmails<T extends { email: string; claimed?: boolean }>(
     (item) =>
       (status === "all" ||
         (status === "claimed") === (item.claimed === true)) &&
-      (!needle || item.email.toLowerCase().includes(needle))
+      (!needle ||
+        `${item.email} ${item.name ?? ""}`.toLowerCase().includes(needle))
   );
 }

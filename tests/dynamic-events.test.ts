@@ -33,7 +33,7 @@ test("non-dynamic events still require the participant list", async () => {
     eligible: false,
     reason: "not_listed",
   });
-  expect(await user.mutation(api.claims.claim, { slug: "meetup" })).toMatchObject({
+  expect(await user.mutation(api.claims.claim, { slug: "meetup", name: "Test Attendee" })).toMatchObject({
     ok: false,
   });
 });
@@ -49,10 +49,10 @@ test("dynamic events let any verified email claim once and record the email", as
     instructionsViewed: false,
   });
 
-  const first = await user.mutation(api.claims.claim, { slug: "meetup" });
+  const first = await user.mutation(api.claims.claim, { slug: "meetup", name: "Test Attendee" });
   expect(first).toMatchObject({ ok: true, code: "A" });
 
-  const second = await user.mutation(api.claims.claim, { slug: "meetup" });
+  const second = await user.mutation(api.claims.claim, { slug: "meetup", name: "Test Attendee" });
   expect(second).toMatchObject({ ok: true, code: "A", alreadyClaimed: true });
 
   await t.run(async (ctx) => {
@@ -82,7 +82,7 @@ test("dynamic events report sold out once the pool is exhausted", async () => {
       claimedAt: Date.now(),
     });
   });
-  expect(await user.mutation(api.claims.claim, { slug: "meetup" })).toMatchObject({
+  expect(await user.mutation(api.claims.claim, { slug: "meetup", name: "Test Attendee" })).toMatchObject({
     ok: false,
     error: "All codes for this event have been claimed.",
   });
@@ -93,7 +93,7 @@ test("dynamic events gate on instructions and enroll on acknowledgement", async 
   await t.run(async (ctx) => {
     await ctx.db.patch(eventId, { claimInstructions: "Redeem at checkout." });
   });
-  expect(await user.mutation(api.claims.claim, { slug: "meetup" })).toMatchObject({
+  expect(await user.mutation(api.claims.claim, { slug: "meetup", name: "Test Attendee" })).toMatchObject({
     ok: false,
     error: "Read the redemption instructions before claiming your code.",
   });
@@ -102,7 +102,7 @@ test("dynamic events gate on instructions and enroll on acknowledgement", async 
     eligible: true,
     instructionsViewed: true,
   });
-  expect(await user.mutation(api.claims.claim, { slug: "meetup" })).toMatchObject({
+  expect(await user.mutation(api.claims.claim, { slug: "meetup", name: "Test Attendee" })).toMatchObject({
     ok: true,
     code: "A",
   });
@@ -117,7 +117,7 @@ test("blacklisted emails cannot claim from dynamic events", async () => {
     eligible: false,
     reason: "not_listed",
   });
-  expect(await user.mutation(api.claims.claim, { slug: "meetup" })).toMatchObject({
+  expect(await user.mutation(api.claims.claim, { slug: "meetup", name: "Test Attendee" })).toMatchObject({
     ok: false,
   });
 });
@@ -210,4 +210,34 @@ test("the home page lists only the events the viewer is enrolled in or has claim
     await ctx.db.insert("blacklistedEmails", { email: "att@example.com" });
   });
   expect(await user.query(api.events.mine, {})).toEqual([]);
+});
+
+test("dynamic events require the claimant's name and keep it on the participant row", async () => {
+  const { t, user, eventId } = await setup({ dynamic: true, codes: ["A"] });
+  expect(await user.mutation(api.claims.claim, { slug: "meetup" })).toMatchObject({
+    ok: false,
+    error: "Enter your name to claim your code.",
+  });
+  expect(await user.mutation(api.claims.claim, { slug: "meetup", name: "   " })).toMatchObject({
+    ok: false,
+    error: "Enter your name to claim your code.",
+  });
+  expect(
+    await user.mutation(api.claims.claim, { slug: "meetup", name: "  Ada Lovelace  " }),
+  ).toMatchObject({ ok: true, code: "A" });
+  const row = await t.run(async (ctx) =>
+    (
+      await ctx.db
+        .query("emails")
+        .withIndex("by_event", (q) => q.eq("eventId", eventId))
+        .collect()
+    ).find((e) => e.name !== undefined),
+  );
+  expect(row?.name).toBe("Ada Lovelace");
+  // Returning for the same code doesn't need the name again.
+  expect(await user.mutation(api.claims.claim, { slug: "meetup" })).toMatchObject({
+    ok: true,
+    code: "A",
+    alreadyClaimed: true,
+  });
 });

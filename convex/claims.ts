@@ -242,8 +242,14 @@ export const allowReclaim = mutation({
   },
 });
 
+export const MAX_CLAIMANT_NAME = 120;
+
 export const claim = mutation({
-  args: { slug: v.string(), codeType: v.optional(v.string()) },
+  args: {
+    slug: v.string(),
+    codeType: v.optional(v.string()),
+    name: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     // Codes are only dispensed to the signed-in user's verified identity
     // (their email, or for X events the handle Clerk reports for them), so
@@ -308,6 +314,14 @@ export const claim = mutation({
       };
     }
 
+    const name = args.name?.trim().slice(0, MAX_CLAIMANT_NAME) || undefined;
+    if (event.dynamic && !name && !allowed.name) {
+      return {
+        ok: false as const,
+        error: "Enter your name to claim your code.",
+      };
+    }
+
     const requestedType = args.codeType?.trim() || undefined;
 
     // A code reserved for this attendee (via waitlist approval) takes priority;
@@ -339,6 +353,9 @@ export const claim = mutation({
       claimedAt: Date.now(),
       reservedFor: undefined,
     });
+    if (name && name !== allowed.name) {
+      await ctx.db.patch(allowed._id, { name });
+    }
     return {
       ok: true as const,
       code: available.code,

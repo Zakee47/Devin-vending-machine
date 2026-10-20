@@ -217,16 +217,27 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
   const identity = event?.identity ?? "email";
   const byHandle = identity === "x";
   const labels = identityLabels(identity);
+  const namesByEmail = new Map(
+    emails?.flatMap((e) => (e.name ? [[e.email, e.name] as const] : [])) ?? []
+  );
   const listedEmails:
-    | { email: string; id?: Id<"emails">; claimed: boolean; blocked?: boolean }[]
+    | {
+        email: string;
+        name?: string;
+        id?: Id<"emails">;
+        claimed: boolean;
+        blocked?: boolean;
+      }[]
     | undefined = isDynamic
     ? codes &&
       [...claimedCodesByEmail.keys()].map((email) => ({
         email,
+        name: namesByEmail.get(email),
         claimed: true,
       }))
     : emails?.map((e) => ({
         email: e.email,
+        name: e.name,
         id: e._id,
         claimed: claimedCodesByEmail.has(e.email),
         blocked: e.blockedAt !== undefined,
@@ -529,8 +540,8 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
   function exportEmails() {
     if (!listedEmails || !event) return;
     downloadCsv(`${event.slug}-${labels.exportName}.csv`, [
-      [byHandle ? "handle" : "email"],
-      ...listedEmails.map((e) => [e.email]),
+      [byHandle ? "handle" : "email", "name"],
+      ...listedEmails.map((e) => [e.email, e.name ?? ""]),
     ]);
   }
 
@@ -1073,6 +1084,7 @@ export default function ManageEvent({ id }: { id: Id<"events"> }) {
                 return {
                   key: emailId ?? e.email,
                   label: e.email,
+                  detail: e.name,
                   claimed: e.claimed && !isDynamic,
                   blocked: e.blocked,
                   onToggleBlock:
@@ -2158,6 +2170,7 @@ function RowList({
   items?: {
     key: string;
     label: string;
+    detail?: string;
     tag?: string;
     claimed?: boolean;
     blocked?: boolean;
@@ -2216,6 +2229,11 @@ function RowList({
             >
               {item.label}
             </span>
+            {item.detail ? (
+              <span className="truncate text-xs text-muted-foreground">
+                {item.detail}
+              </span>
+            ) : null}
             {item.tag ? (
               <Badge
                 variant="outline"
