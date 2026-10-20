@@ -99,6 +99,7 @@ import { Textarea } from "@/components/ui/textarea";
 import EventStripeCodes from "@/components/EventStripeCodes";
 import { ClaimInstructionsField } from "@/components/ClaimInstructionsField";
 import { SignInMessageField } from "@/components/SignInMessageField";
+import { ContactEmailField } from "@/components/ContactEmailField";
 import {
   EventDatesField,
   DynamicToggle,
@@ -2316,6 +2317,7 @@ function EventDetailsForm({
   const [signInMessage, setSignInMessage] = useState(
     event.signInMessage ?? ""
   );
+  const [contactEmail, setContactEmail] = useState(event.contactEmail ?? "");
   const [saving, setSaving] = useState(false);
   const dirty =
     name.trim() !== event.name ||
@@ -2326,7 +2328,8 @@ function EventDetailsForm({
     claimInstructions.trim() !== (event.claimInstructions ?? "") ||
     dynamic !== (event.dynamic ?? false) ||
     identity !== (event.identity ?? "email") ||
-    signInMessage.trim() !== (event.signInMessage ?? "");
+    signInMessage.trim() !== (event.signInMessage ?? "") ||
+    contactEmail.trim().toLowerCase() !== (event.contactEmail ?? "");
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -2343,6 +2346,7 @@ function EventDetailsForm({
         dynamic: dynamic || undefined,
         identity,
         signInMessage,
+        contactEmail,
       });
       setSlug(savedSlug);
       toast.success("Event saved");
@@ -2438,6 +2442,12 @@ function EventDetailsForm({
               onChange={setSignInMessage}
               identity={identity}
               dynamic={dynamic}
+            />
+            <ContactEmailField
+              id="detail-contact-email"
+              className="sm:col-span-2"
+              value={contactEmail}
+              onChange={setContactEmail}
             />
             <DynamicToggle
               id="detail-dynamic"

@@ -26,6 +26,7 @@ import {
 import { SavedBatchPicker } from "@/components/StripeBatchDetails";
 import { ClaimInstructionsField } from "@/components/ClaimInstructionsField";
 import { SignInMessageField } from "@/components/SignInMessageField";
+import { ContactEmailField } from "@/components/ContactEmailField";
 import {
   EventDatesField,
   DynamicToggle,
@@ -80,6 +81,7 @@ export default function NewEventForm({
   const [dynamic, setDynamic] = useState(false);
   const [identity, setIdentity] = useState<AttendeeIdentity>("email");
   const [signInMessage, setSignInMessage] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [source, setSource] = useState(initialBatchId ? "saved" : "later");
   const [batchId, setBatchId] = useState<Id<"stripeBatches"> | "">(
     initialBatchId ?? "",
@@ -108,6 +110,7 @@ export default function NewEventForm({
         dynamic,
         identity,
         signInMessage: signInMessage || undefined,
+        contactEmail: contactEmail || undefined,
         stripeGeneration: generation,
         stripeBatchId: source === "saved" && batchId ? batchId : undefined,
       });
@@ -282,6 +285,11 @@ export default function NewEventForm({
                       onChange={setSignInMessage}
                       identity={identity}
                       dynamic={dynamic}
+                    />
+                    <ContactEmailField
+                      id="event-contact-email"
+                      value={contactEmail}
+                      onChange={setContactEmail}
                     />
                     <DynamicToggle
                       id="event-dynamic"

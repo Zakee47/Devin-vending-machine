@@ -72,6 +72,9 @@ export default defineSchema({
     // Organizer-written Markdown shown to signed-out visitors on the claim
     // page in place of the default sign-in hint.
     signInMessage: v.optional(v.string()),
+    // Organizer address behind the optional "Get in touch" button on the
+    // claim page; lowercased.
+    contactEmail: v.optional(v.string()),
     // Normalized email of the admin who created the event; absent on events
     // created before it was recorded.
     createdBy: v.optional(v.string()),

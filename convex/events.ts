@@ -195,6 +195,7 @@ export const getBySlug = query({
       dynamic: event.dynamic ?? false,
       identity: eventIdentity(event),
       signInMessage: event.signInMessage,
+      contactEmail: event.contactEmail,
       // Lets the claim page show a manage link to this event's admins.
       viewerIsAdmin: await isEventAdmin(ctx, event._id),
       soldOut: availableTypes.size === 0,
@@ -241,6 +242,7 @@ export const get = query({
       dynamic: event.dynamic,
       identity: eventIdentity(event),
       signInMessage: event.signInMessage,
+      contactEmail: event.contactEmail,
       createdBy: event.createdBy,
     };
   },
@@ -455,6 +457,7 @@ export const create = mutation({
     dynamic: v.optional(v.boolean()),
     identity: v.optional(identityValidator),
     signInMessage: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
     // Accepted but ignored: sent by admin forms loaded before the Hidden
     // option was removed.
     hidden: v.optional(v.boolean()),
@@ -487,6 +490,7 @@ export const create = mutation({
       dynamic: args.dynamic || undefined,
       identity: args.identity === "x" ? "x" : undefined,
       signInMessage: args.signInMessage?.trim() || undefined,
+      contactEmail: resolveContactEmail(args.contactEmail),
       createdBy: creator,
     });
     if (args.stripeGeneration) await startBatch(ctx, args.stripeGeneration, id);
@@ -512,6 +516,7 @@ export const update = mutation({
     dynamic: v.optional(v.boolean()),
     identity: v.optional(identityValidator),
     signInMessage: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
     hidden: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -584,10 +589,27 @@ export const update = mutation({
       ...(args.signInMessage !== undefined
         ? { signInMessage: args.signInMessage.trim() || undefined }
         : {}),
+      ...(args.contactEmail !== undefined
+        ? { contactEmail: resolveContactEmail(args.contactEmail) }
+        : {}),
     });
     return { slug };
   },
 });
+
+// Blank clears the address; anything else must be a single plain address,
+// since it is dropped into a mailto: link (no ?cc=, #, or other URL syntax).
+const CONTACT_EMAIL_PART = "[^\\s@?#&/%<>,;:\\\\\"()]+";
+const CONTACT_EMAIL_RE = new RegExp(
+  `^${CONTACT_EMAIL_PART}@${CONTACT_EMAIL_PART}\\.${CONTACT_EMAIL_PART}$`
+);
+function resolveContactEmail(raw: string | undefined): string | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const email = normalizeEmail(raw);
+  if (!email || !CONTACT_EMAIL_RE.test(email))
+    throw new ConvexError("Enter a valid contact email address.");
+  return email;
+}
 
 export const remove = mutation({
   args: { id: v.id("events") },
