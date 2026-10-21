@@ -247,7 +247,7 @@ test("claimant names are flattened to one printable line and ignored on list eve
   expect(
     await dynamic.user.mutation(api.claims.claim, {
       slug: "meetup",
-      name: " Ada\nLovelace\u0000\t \u202e Jr.\u0085",
+      name: " Ada\nLovelace\u0000\t \u202e\u061c\u200d Jr.\u0085\u00ad",
     }),
   ).toMatchObject({ ok: true });
   const dynamicRow = await dynamic.t.run(async (ctx) =>
