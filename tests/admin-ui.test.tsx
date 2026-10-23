@@ -7,6 +7,7 @@ import SystemAdminGate from "../components/SystemAdminGate";
 import AdminNav from "../components/AdminNav";
 import NewEventForm from "../components/NewEventForm";
 import { DynamicEventWarning } from "../components/DynamicEventWarning";
+import { EventOptionalSettings } from "../components/EventOptionalSettings";
 import AdminDashboard from "../app/admin/page";
 import CodeStudioPage from "../components/CodeStudioPage";
 import { SavedBatchPicker } from "../components/StripeBatchDetails";
@@ -349,14 +350,16 @@ test("new event form exposes all three code sources and keeps page settings opti
     "Use saved",
     "Add later",
     "Claim page settings",
-    "Redemption instructions",
-    ">None</button>",
-    ">Pro</button>",
-    ">Max</button>",
-    ">Custom</button>",
+    "Add description",
+    "Set redemption instructions",
+    "Set custom sign-in message",
+    "Set contact / support email",
     "Create event",
   ])
     expect(html).toContain(label);
+  // Optional settings start collapsed: no instruction tabs or textareas.
+  for (const control of [">None</button>", ">Pro</button>", "<textarea"])
+    expect(html).not.toContain(control);
   expect(html).toContain('maxLength="120"');
   expect(html).not.toContain("STRIPE_API_KEY");
 });
@@ -498,9 +501,35 @@ test("missing Stripe setup disables generation without removing the other event 
   expect(studio).not.toContain("Value per code (USD)");
 });
 
-test("sign-in message shows the default hint with a customize button", () => {
+test("sign-in message is collapsed into a single set-custom button by default", () => {
   const form = renderToStaticMarkup(<NewEventForm />);
-  expect(form).toContain("Customize sign-in message");
-  expect(form).toContain("Sign in with the email you used for this event");
-  expect(form).not.toContain("replacing the default sign-in hint");
+  expect(form).toContain("Set custom sign-in message");
+  expect(form).not.toContain("Default · shown before attendees sign in");
+  expect(form).not.toContain("Sign in with the email you used for this event");
+});
+
+test("optional settings with a value render expanded with a clear action", () => {
+  const html = renderToStaticMarkup(
+    <EventOptionalSettings
+      idPrefix="t"
+      description=""
+      onDescriptionChange={() => {}}
+      instructions=""
+      onInstructionsChange={() => {}}
+      instructionsDescription="Read first."
+      signInMessage="Use your work email."
+      onSignInMessageChange={() => {}}
+      identity="email"
+      contactEmail="help@example.com"
+      onContactEmailChange={() => {}}
+    />,
+  );
+  expect(html).toContain("Use your work email.");
+  expect(html).toContain("Use default");
+  expect(html).toContain('value="help@example.com"');
+  expect(html).toContain("Remove");
+  expect(html).toContain("Add description");
+  expect(html).toContain("Set redemption instructions");
+  expect(html).not.toContain("Set custom sign-in message");
+  expect(html).not.toContain("Set contact / support email");
 });

@@ -348,12 +348,13 @@ export function DynamicToggle({
         />
         <FieldContent>
           <FieldTitle>Dynamic: anyone can claim</FieldTitle>
-          <FieldDescription>
-            No participant list needed. Anyone who signs in from the claim URL
-            or QR code gets a code, and their{" "}
-            {identity === "x" ? "X handle" : "email"} is recorded so each{" "}
-            {identity === "x" ? "account" : "address"} can only claim once.
-          </FieldDescription>
+          {checked ? (
+            <FieldDescription>
+              No participant list needed. Anyone who signs in from the claim
+              URL or QR code gets one code per{" "}
+              {identity === "x" ? "X account" : "email address"}.
+            </FieldDescription>
+          ) : null}
         </FieldContent>
       </Field>
     </FieldLabel>
