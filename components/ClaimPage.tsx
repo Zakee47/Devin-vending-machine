@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   SignInButton,
+  SignUpButton,
   SignOutButton,
   useAuth,
   useUser,
@@ -445,6 +446,17 @@ function ClaimPageForViewer({ slug, preview = false }: ClaimPageProps) {
                             : "Sign in to claim"}
                       </Button>
                     </SignInButton>
+                    <p className="text-center text-sm text-muted-foreground">
+                      New here?{" "}
+                      <SignUpButton mode="modal">
+                        <button
+                          type="button"
+                          className="font-medium text-foreground underline-offset-4 hover:underline"
+                        >
+                          Create an account
+                        </button>
+                      </SignUpButton>
+                    </p>
                     {event.contactEmail ? (
                       <GetInTouch
                         email={event.contactEmail}
