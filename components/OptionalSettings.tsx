@@ -17,8 +17,9 @@ export type OptionalSetting = {
   set: boolean;
   onClear: () => void;
   clearLabel?: string;
-  // When given, a saved value is folded into a one-line summary row with an
-  // edit button instead of staying expanded.
+  // A collapsible setting folds its saved value into a one-line summary row
+  // with an edit button instead of staying expanded.
+  collapsible?: boolean;
   summary?: ReactNode;
   // `focus` is true when the admin just expanded the setting.
   render: (focus: boolean) => ReactNode;
@@ -26,7 +27,7 @@ export type OptionalSetting = {
 
 // Optional form settings stay out of the way until needed: each shows as a
 // small "+ Add …" button, and expands into a panel once clicked or when it
-// already has a value. Settings with a `summary` collapse again once saved.
+// already has a value. Collapsible settings fold away again once saved.
 export function OptionalSettings({
   settings,
   className,
@@ -36,20 +37,20 @@ export function OptionalSettings({
 }) {
   const [opened, setOpened] = useState<string[]>(() =>
     settings
-      .filter((s) => s.set && s.summary === undefined)
+      .filter((s) => s.set && !s.collapsible)
       .map((s) => s.key)
   );
   const [focused, setFocused] = useState<string[]>([]);
   // A setting that gains a value elsewhere joins the open set, and stays open
   // while the admin edits it down to empty; only its Remove button closes it.
   const newlySet = settings.filter(
-    (s) => s.set && s.summary === undefined && !opened.includes(s.key)
+    (s) => s.set && !s.collapsible && !opened.includes(s.key)
   );
   if (newlySet.length > 0) {
     setOpened([...opened, ...newlySet.map((s) => s.key)]);
   }
   const expanded = settings.filter(
-    (s) => opened.includes(s.key) || (s.set && s.summary === undefined)
+    (s) => opened.includes(s.key) || (s.set && !s.collapsible)
   );
   const summarized = settings.filter(
     (s) => s.set && !expanded.includes(s)
@@ -87,7 +88,7 @@ export function OptionalSettings({
                 <X data-icon="inline-start" />
                 {s.clearLabel ?? "Remove"}
               </Button>
-              {s.summary !== undefined ? (
+              {s.collapsible ? (
                 <Button
                   type="button"
                   variant="ghost"

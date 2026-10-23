@@ -87,6 +87,7 @@ export function EventOptionalSettings({
           icon: ListChecks,
           set: instructions !== "",
           onClear: () => onInstructionsChange(""),
+          collapsible: true,
           summary: instructionsSummary(instructions),
           render: () => (
             <ClaimInstructionsField
