@@ -49,7 +49,7 @@ export function ClaimInstructionsField({
   function selectMode(next: ClaimInstructionsMode) {
     if (mode === "custom") setCustomDraft(value);
     setMode(next);
-    if (next === "custom") setShowDetails(true);
+    setShowDetails(next === "custom");
     if (next === "none") onChange("");
     else if (next === "custom")
       onChange(mode === "custom" ? value : customDraft);
