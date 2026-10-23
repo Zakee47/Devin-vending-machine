@@ -8,6 +8,7 @@ import AdminNav from "../components/AdminNav";
 import NewEventForm from "../components/NewEventForm";
 import { DynamicEventWarning } from "../components/DynamicEventWarning";
 import { EventOptionalSettings } from "../components/EventOptionalSettings";
+import { CLAIM_INSTRUCTION_PRESETS } from "../lib/claim-instructions";
 import AdminDashboard from "../app/admin/page";
 import CodeStudioPage from "../components/CodeStudioPage";
 import { SavedBatchPicker } from "../components/StripeBatchDetails";
@@ -532,4 +533,35 @@ test("optional settings with a value render expanded with a clear action", () =>
   expect(html).toContain("Set redemption instructions");
   expect(html).not.toContain("Set custom sign-in message");
   expect(html).not.toContain("Set contact / support email");
+});
+
+test("saved redemption instructions fold into a summary row until edited", () => {
+  const props = {
+    idPrefix: "t",
+    description: "",
+    onDescriptionChange: () => {},
+    onInstructionsChange: () => {},
+    instructionsDescription: "Read first.",
+    signInMessage: "",
+    onSignInMessageChange: () => {},
+    identity: "email" as const,
+    contactEmail: "",
+    onContactEmailChange: () => {},
+  };
+  const pro = renderToStaticMarkup(
+    <EventOptionalSettings
+      {...props}
+      instructions={CLAIM_INSTRUCTION_PRESETS.pro.text}
+    />,
+  );
+  expect(pro).toContain("Pro preset");
+  expect(pro).toContain("View / edit");
+  expect(pro).not.toContain(">None</button>");
+  expect(pro).not.toContain("Set redemption instructions");
+
+  const custom = renderToStaticMarkup(
+    <EventOptionalSettings {...props} instructions="Go to billing." />,
+  );
+  expect(custom).toContain("Custom");
+  expect(custom).not.toContain("Go to billing.");
 });

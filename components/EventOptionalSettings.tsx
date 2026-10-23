@@ -2,12 +2,23 @@
 
 import { FileText, ListChecks, Mail, MessageSquareText } from "lucide-react";
 import type { AttendeeIdentity } from "@/lib/attendee-identity";
+import {
+  CLAIM_INSTRUCTION_PRESETS,
+  claimInstructionsMode,
+} from "@/lib/claim-instructions";
 import { ClaimInstructionsField } from "@/components/ClaimInstructionsField";
 import { ContactEmailField } from "@/components/ContactEmailField";
 import { OptionalSettings } from "@/components/OptionalSettings";
 import { SignInMessageField } from "@/components/SignInMessageField";
 import { Field, FieldDescription } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
+
+function instructionsSummary(instructions: string) {
+  const mode = claimInstructionsMode(instructions);
+  if (mode === "none") return undefined;
+  if (mode === "custom") return "Custom";
+  return `${CLAIM_INSTRUCTION_PRESETS[mode].label} preset`;
+}
 
 // The optional, attendee-facing event settings shared by the create and
 // manage forms: description, redemption instructions, sign-in message and
@@ -76,6 +87,7 @@ export function EventOptionalSettings({
           icon: ListChecks,
           set: instructions !== "",
           onClear: () => onInstructionsChange(""),
+          summary: instructionsSummary(instructions),
           render: () => (
             <ClaimInstructionsField
               id={`${idPrefix}-instructions`}
