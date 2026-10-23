@@ -113,10 +113,12 @@ export function OptionalSettings({
           >
             <div className="flex min-w-0 items-center gap-2">
               <Icon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="font-medium">{s.title}</span>
-              <span className="truncate text-muted-foreground">
-                {s.summary}
-              </span>
+              <div className="flex min-w-0 flex-col sm:flex-row sm:items-center sm:gap-2">
+                <span className="whitespace-nowrap font-medium">{s.title}</span>
+                <span className="truncate text-muted-foreground">
+                  {s.summary}
+                </span>
+              </div>
             </div>
             <Button
               type="button"
