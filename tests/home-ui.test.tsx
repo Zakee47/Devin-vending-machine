@@ -32,6 +32,7 @@ vi.mock("convex/react", () => ({
 }));
 vi.mock("@clerk/nextjs", () => ({
   SignInButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SignUpButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useAuth: () => ({
     isLoaded: !state.authLoading,
     isSignedIn: state.authLoading ? undefined : state.authenticated,
