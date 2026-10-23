@@ -98,9 +98,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import EventStripeCodes from "@/components/EventStripeCodes";
-import { ClaimInstructionsField } from "@/components/ClaimInstructionsField";
-import { SignInMessageField } from "@/components/SignInMessageField";
-import { ContactEmailField } from "@/components/ContactEmailField";
+import { EventOptionalSettings } from "@/components/EventOptionalSettings";
 import {
   EventDatesField,
   DynamicToggle,
@@ -2392,7 +2390,7 @@ function EventDetailsForm({
       <CardHeader>
         <CardTitle>Event details</CardTitle>
         <CardDescription>
-          The slug is the public claim URL. Changing it moves the page.
+          Changing the claim URL moves the page.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -2408,26 +2406,13 @@ function EventDetailsForm({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="detail-slug">Slug</FieldLabel>
+              <FieldLabel htmlFor="detail-slug">Claim URL</FieldLabel>
               <SlugInput
                 id="detail-slug"
                 required
                 value={slug}
                 onChange={setSlug}
               />
-            </Field>
-            <Field className="sm:col-span-2">
-              <FieldLabel htmlFor="detail-description">Description</FieldLabel>
-              <Textarea
-                id="detail-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={4}
-                className="resize-y"
-              />
-              <FieldDescription>
-                Pasted links become clickable; Markdown works too.
-              </FieldDescription>
             </Field>
             <EventDatesField
               id="detail-date"
@@ -2439,13 +2424,6 @@ function EventDetailsForm({
               }}
               placeholder="No date"
               description="Optional. Leave it empty and no date is shown anywhere."
-            />
-            <ClaimInstructionsField
-              id="detail-instructions"
-              className="sm:col-span-2"
-              value={claimInstructions}
-              onChange={setClaimInstructions}
-              description="Optional. When set, attendees see a “Redemption steps” button after claiming their code."
             />
             <div className="sm:col-span-2">
               <IdentityPicker
@@ -2459,19 +2437,19 @@ function EventDetailsForm({
                 }
               />
             </div>
-            <SignInMessageField
-              id="detail-signin-message"
+            <EventOptionalSettings
               className="sm:col-span-2"
-              value={signInMessage}
-              onChange={setSignInMessage}
+              idPrefix="detail"
+              description={description}
+              onDescriptionChange={setDescription}
+              instructions={claimInstructions}
+              onInstructionsChange={setClaimInstructions}
+              instructionsDescription="When set, attendees see a “Redemption steps” button after claiming their code."
+              signInMessage={signInMessage}
+              onSignInMessageChange={setSignInMessage}
               identity={identity}
-              dynamic={dynamic}
-            />
-            <ContactEmailField
-              id="detail-contact-email"
-              className="sm:col-span-2"
-              value={contactEmail}
-              onChange={setContactEmail}
+              contactEmail={contactEmail}
+              onContactEmailChange={setContactEmail}
             />
             <DynamicToggle
               id="detail-dynamic"

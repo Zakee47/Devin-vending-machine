@@ -8,7 +8,7 @@ import {
   type ClaimInstructionsMode,
 } from "@/lib/claim-instructions";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription } from "@/components/ui/field";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ClaimInstructions } from "@/components/ClaimInstructions";
@@ -53,7 +53,6 @@ export function ClaimInstructionsField({
 
   return (
     <Field className={className}>
-      <FieldLabel htmlFor={id}>Redemption instructions</FieldLabel>
       <Tabs
         value={mode}
         onValueChange={(next) => selectMode(next as ClaimInstructionsMode)}

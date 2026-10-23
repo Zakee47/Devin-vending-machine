@@ -24,9 +24,7 @@ import {
   usd,
 } from "@/lib/stripe-form";
 import { SavedBatchPicker } from "@/components/StripeBatchDetails";
-import { ClaimInstructionsField } from "@/components/ClaimInstructionsField";
-import { SignInMessageField } from "@/components/SignInMessageField";
-import { ContactEmailField } from "@/components/ContactEmailField";
+import { EventOptionalSettings } from "@/components/EventOptionalSettings";
 import {
   EventDatesField,
   DynamicToggle,
@@ -62,7 +60,6 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 
 export default function NewEventForm({
   initialBatchId,
@@ -219,21 +216,19 @@ export default function NewEventForm({
                     placeholder="Optional"
                   />
                 </FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="event-description">
-                    Description
-                  </FieldLabel>
-                  <Textarea
-                    id="event-description"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={3}
-                    placeholder="A short welcome for your attendees"
-                  />
-                  <FieldDescription>
-                    Pasted links become clickable; Markdown works too.
-                  </FieldDescription>
-                </Field>
+                <EventOptionalSettings
+                  idPrefix="event"
+                  description={description}
+                  onDescriptionChange={setDescription}
+                  instructions={instructions}
+                  onInstructionsChange={setInstructions}
+                  instructionsDescription="Attendees must read these before claiming. They can also view them after claiming."
+                  signInMessage={signInMessage}
+                  onSignInMessageChange={setSignInMessage}
+                  identity={identity}
+                  contactEmail={contactEmail}
+                  onContactEmailChange={setContactEmail}
+                />
                 <details className="group rounded-lg border bg-muted/30 open:bg-transparent">
                   <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg px-4 py-3 transition-colors outline-none select-none hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
                     <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
@@ -244,7 +239,7 @@ export default function NewEventForm({
                         Claim page settings
                       </span>
                       <span className="truncate text-xs text-muted-foreground">
-                        URL, instructions, sign-in, and who can claim
+                        Custom URL, attendee identity, and who can claim
                       </span>
                     </span>
                     <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
@@ -263,12 +258,6 @@ export default function NewEventForm({
                         name unless you set a custom slug.
                       </FieldDescription>
                     </Field>
-                    <ClaimInstructionsField
-                      id="event-instructions"
-                      value={instructions}
-                      onChange={setInstructions}
-                      description="Attendees must read these before claiming. They can also view them after claiming."
-                    />
                     <IdentityPicker
                       id="event-identity"
                       value={identity}
@@ -278,18 +267,6 @@ export default function NewEventForm({
                           ? "Attendees sign in with X and codes go to the @handles on your list. X sign-in must be enabled in Clerk."
                           : "Attendees sign in with the email address on your list."
                       }
-                    />
-                    <SignInMessageField
-                      id="event-signin-message"
-                      value={signInMessage}
-                      onChange={setSignInMessage}
-                      identity={identity}
-                      dynamic={dynamic}
-                    />
-                    <ContactEmailField
-                      id="event-contact-email"
-                      value={contactEmail}
-                      onChange={setContactEmail}
                     />
                     <DynamicToggle
                       id="event-dynamic"
