@@ -165,7 +165,7 @@ test("archiving a block stops dispensing and keeps every code; unarchiving resto
     emailVerified: true,
   });
   expect(
-    await attendee.mutation(api.claims.claim, { slug: event.slug })
+    await attendee.mutation(api.claims.claim, { slug: event.slug, name: "Test Attendee" })
   ).toMatchObject({ code: expect.stringMatching(/^[AB]$/) });
 
   expect(
@@ -191,7 +191,7 @@ test("archiving a block stops dispensing and keeps every code; unarchiving resto
     emailVerified: true,
   });
   expect(
-    await other.mutation(api.claims.claim, { slug: event.slug })
+    await other.mutation(api.claims.claim, { slug: event.slug, name: "Test Attendee" })
   ).toMatchObject({ ok: false });
   const mine = await attendee.query(api.codes.mine, {});
   expect(mine?.map((c) => c.event?.slug)).toEqual([event.slug]);
@@ -212,7 +212,7 @@ test("archiving a block stops dispensing and keeps every code; unarchiving resto
     (await admin.query(api.events.get, { id: event.id }))!.archivedCodeTypes
   ).toEqual([]);
   expect(
-    await other.mutation(api.claims.claim, { slug: event.slug })
+    await other.mutation(api.claims.claim, { slug: event.slug, name: "Test Attendee" })
   ).toMatchObject({ code: expect.stringMatching(/^[AB]$/) });
 });
 
@@ -242,7 +242,7 @@ test("with one block archived, unrestricted claims come from the other block", a
     emailVerified: true,
   });
   expect(
-    await attendee.mutation(api.claims.claim, { slug: event.slug })
+    await attendee.mutation(api.claims.claim, { slug: event.slug, name: "Test Attendee" })
   ).toMatchObject({ code: "NEW" });
 });
 
@@ -324,7 +324,7 @@ test("archiving a legacy block without a stored type list still lets other codes
     emailVerified: true,
   });
   expect(
-    await attendee.mutation(api.claims.claim, { slug: event.slug })
+    await attendee.mutation(api.claims.claim, { slug: event.slug, name: "Test Attendee" })
   ).toMatchObject({ code: "PLAIN" });
 });
 

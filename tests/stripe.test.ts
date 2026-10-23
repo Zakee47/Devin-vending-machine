@@ -283,8 +283,8 @@ describe("Stripe generation", () => {
     await drain(t);
     expect((await admin.query(api.stripeBatches.list, { eventId: event.id }))[0].redemptionsPerCode).toBe(2);
     const attendee = t.withIdentity({ subject: "attendee", email: "attendee@example.com", emailVerified: true });
-    expect(await attendee.mutation(api.claims.claim, { slug: event.slug })).toMatchObject({ ok: true, alreadyClaimed: false });
-    expect(await attendee.mutation(api.claims.claim, { slug: event.slug })).toMatchObject({ ok: true, alreadyClaimed: true });
+    expect(await attendee.mutation(api.claims.claim, { slug: event.slug, name: "Test Attendee" })).toMatchObject({ ok: true, alreadyClaimed: false });
+    expect(await attendee.mutation(api.claims.claim, { slug: event.slug, name: "Test Attendee" })).toMatchObject({ ok: true, alreadyClaimed: true });
     expect(await t.run((ctx) => ctx.db.query("codes").collect())).toHaveLength(1);
   });
 
