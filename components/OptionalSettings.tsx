@@ -32,7 +32,16 @@ export function OptionalSettings({
   settings: OptionalSetting[];
   className?: string;
 }) {
-  const [opened, setOpened] = useState<string[]>([]);
+  const [opened, setOpened] = useState<string[]>(() =>
+    settings.filter((s) => s.set).map((s) => s.key)
+  );
+  const [focused, setFocused] = useState<string[]>([]);
+  // A setting that gains a value elsewhere joins the open set, and stays open
+  // while the admin edits it down to empty; only its Remove button closes it.
+  const newlySet = settings.filter((s) => s.set && !opened.includes(s.key));
+  if (newlySet.length > 0) {
+    setOpened([...opened, ...newlySet.map((s) => s.key)]);
+  }
   const expanded = settings.filter(
     (s) => s.set || opened.includes(s.key)
   );
@@ -52,13 +61,14 @@ export function OptionalSettings({
               onClick={() => {
                 s.onClear();
                 setOpened((prev) => prev.filter((k) => k !== s.key));
+                setFocused((prev) => prev.filter((k) => k !== s.key));
               }}
             >
               <X data-icon="inline-start" />
               {s.clearLabel ?? "Remove"}
             </Button>
           </div>
-          {s.render(opened.includes(s.key))}
+          {s.render(focused.includes(s.key))}
         </Field>
       ))}
       {collapsed.length > 0 ? (
@@ -72,7 +82,10 @@ export function OptionalSettings({
                 variant="outline"
                 size="sm"
                 className="text-muted-foreground"
-                onClick={() => setOpened((prev) => [...prev, s.key])}
+                onClick={() => {
+                  setOpened((prev) => [...prev, s.key]);
+                  setFocused((prev) => [...prev, s.key]);
+                }}
               >
                 <Plus data-icon="inline-start" />
                 <Icon data-icon="inline-start" />
