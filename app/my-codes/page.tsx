@@ -11,7 +11,7 @@ import {
   Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
-import { SignInButton } from "@clerk/nextjs";
+import { SignInButton, SignUpButton } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import { useViewerAuth } from "@/lib/use-viewer-auth";
 import { api } from "@/convex/_generated/api";
@@ -142,6 +142,17 @@ export default function MyCodesPage() {
                     Sign in
                   </Button>
                 </SignInButton>
+                <p className="mt-3 text-center text-sm text-muted-foreground">
+                  New here?{" "}
+                  <SignUpButton mode="modal">
+                    <button
+                      type="button"
+                      className="font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                      Create an account
+                    </button>
+                  </SignUpButton>
+                </p>
               </CardContent>
             </Card>
           ) : codes === undefined ? (

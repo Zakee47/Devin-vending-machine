@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, LogIn, Ticket } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { SignInButton } from "@clerk/nextjs";
+import { SignInButton, SignUpButton } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useViewerAuth } from "@/lib/use-viewer-auth";
@@ -124,6 +124,11 @@ export default function Home() {
                     Sign in
                   </Button>
                 </SignInButton>
+                <SignUpButton mode="modal">
+                  <Button variant="outline" size="lg" className={HERO_BUTTON}>
+                    Create an account
+                  </Button>
+                </SignUpButton>
               </div>
             </>
           )}
